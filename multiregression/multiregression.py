@@ -1,41 +1,17 @@
 import numpy
 import itertools
 import scipy, scipy.linalg, scipy.special, scipy.sparse
-import multiprocessing
 
 from .expreval import ExprEvaluator, RegrExprEvaluator
 
 MODE_READONLY, MODE_REGRESSION, MODE_VARIANCE = range(3)
 
-def _mp_regress_process(q, AtA_dimensions, Atb_dimensions, internal_dtype):
-    import os
-    AtA = numpy.zeros(AtA_dimensions, internal_dtype)  #(A'A)
-    Atb = numpy.zeros(Atb_dimensions, internal_dtype)  #A'b    
-    while True:
-        msg = q.recv()
-        if msg == 'end':
-            break
-        elif msg == 'get':
-            q.send((AtA, Atb))
-        else:
-            A, b = msg
-            if isinstance(A, scipy.sparse.csr_matrix) or isinstance(A, scipy.sparse.csc_matrix):
-                AtA += A.T.dot(A)
-                Atb += A.T.dot(b)
-            else:
-                AtA += numpy.einsum('...kj,...kl', A, A)
-                Atb += numpy.einsum('...kj,...kl', A, b)            
-        
-
 class Multiregression:
-    _multiprocess = True
-    
-    def __init__(self, problem_dimensions, n_parameters, internal_dtype = numpy.float, multiprocess = True):
+    def __init__(self, problem_dimensions, n_parameters, internal_dtype = numpy.float):
         """Problem dimensions is the size of the problem, it can be () (0-dimentional), or for example (800,600) for 800x600 times the regression problem"""
         self._problem_dimensions = problem_dimensions
         self._n_parameters = n_parameters
         self._internal_dtype = internal_dtype
-        self._multiprocess = multiprocess
         
         assert type(self._problem_dimensions) == tuple
         assert all(type(x) == int for x in self._problem_dimensions)
@@ -44,37 +20,12 @@ class Multiregression:
         self._AtA = numpy.zeros(self._problem_dimensions + (self._n_parameters, self._n_parameters), self._internal_dtype)  #(A'A)
         self._Atb = numpy.zeros(self._problem_dimensions + (self._n_parameters, 1), self._internal_dtype)  #A'b
         
-        if self._multiprocess:
-            pipes = [multiprocessing.Pipe() for x in range(multiprocessing.cpu_count())]
-            self._mp_regress_processes = [(multiprocessing.Process(target = _mp_regress_process, args = (child_conn, self._AtA.shape, self._Atb.shape, self._internal_dtype)), parent_conn) for parent_conn, child_conn in pipes]
-            for p, q in self._mp_regress_processes:
-                p.start()
-            self._mp_regress_id = 0
-        
         self._mode = MODE_REGRESSION
         
         self._rss = 0
         self._n_observations = numpy.zeros(self._problem_dimensions, numpy.int)
         self._cache_beta = None
         self._cache_variance = None
-        
-    def _mp_regress_collect(self):
-        if not self._multiprocess:
-            return
-        
-        data = []
-        for process, pipe in self._mp_regress_processes:
-            pipe.send('get')
-            data.append(pipe.recv())
-         
-        self._AtA = numpy.sum([d[0] for d in data], 0)
-        self._Atb = numpy.sum([d[1] for d in data], 0)
-        
-    def __del__(self):
-        if self._multiprocess:
-            for process, queue in self._mp_regress_processes:
-                queue.send('end')
-                process.join()
         
     def switch_to_variance(self):
         assert self._mode in (MODE_REGRESSION, MODE_VARIANCE), "Only allowed to switch to variance in regression mode."
@@ -113,13 +64,9 @@ class Multiregression:
             b = b * sweights
         if self._mode == MODE_REGRESSION:
             self._cache_beta = None
-            if self._multiprocess:
-                self._mp_regress_processes[self._mp_regress_id][1].send([A, b])
-                self._mp_regress_id = (self._mp_regress_id + 1) % len(self._mp_regress_processes)
-            else:
-                #Eq to numpy.dot(A.T, A) on last dimensions
-                self._AtA += numpy.einsum('...kj,...kl', A, A)
-                self._Atb += numpy.einsum('...kj,...kl', A, b)
+            #Eq to numpy.dot(A.T, A) on last dimensions
+            self._AtA += numpy.einsum('...kj,...kl', A, A)
+            self._Atb += numpy.einsum('...kj,...kl', A, b)
         elif self._mode == MODE_VARIANCE:
             self._cache_variance = None
             if self.beta is None:
@@ -138,7 +85,6 @@ class Multiregression:
         return itertools.product(*(range(x) for x in self._problem_dimensions))
     
     def __getstate__(self):
-        self._mp_regress_collect()
         return {
             'problem_dimensions': self._problem_dimensions,
             'n_parameters': self.n_parameters,
@@ -171,13 +117,10 @@ class Multiregression:
         
         #Always readonly!
         self._mode = MODE_READONLY
-        self._multiprocess = False
-        
     
     @property
     def beta(self):
         if self._cache_beta is None:
-            self._mp_regress_collect()
             self._cache_beta = numpy.ma.masked_all(self._Atb.shape, dtype = numpy.float)
             
             #Speedup for simple cases, computed by maxima
@@ -319,9 +262,9 @@ class Multiregression:
         return ret
         
 class ModelMultiregression(Multiregression):
-    def __init__(self, problem_dimensions, model_str, internal_dtype = numpy.float, multiprocess = True):
+    def __init__(self, problem_dimensions, model_str, internal_dtype = numpy.float):
         self._build_expressions(problem_dimensions, model_str)
-        Multiregression.__init__(self, problem_dimensions, len(self._base_model.parameter_variables), internal_dtype, multiprocess)
+        Multiregression.__init__(self, problem_dimensions, len(self._base_model.parameter_variables), internal_dtype)
         
     def _build_expressions(self, problem_dimensions, model_str):
         self._base_model_str = model_str
