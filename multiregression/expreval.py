@@ -12,7 +12,17 @@ def ast_print(x):
         print(ast.dump(x))
         
 class _SubstituteTransformer(ast.NodeTransformer):
+    """
+    Transformer to replace a variable name by an expression.
+    """
     def __init__(self, substitution_dict):
+        """
+        Initialize the tranformer.
+        
+        :param substitution_dict: Dictionnary whose key are the variables names, and values what the variable should be substituted by.
+        
+        The values can be strings (in which case they are parse by :func:`ast.parse`), :class:`ExprEvaluator` instances, or :class:`ast.AST`.
+        """
         if substitution_dict is None:
             substitution_dict = {}
         self._substitution_dict = {}
@@ -23,30 +33,52 @@ class _SubstituteTransformer(ast.NodeTransformer):
                 self._substitution_dict[variable_name] = substitute_by._parsed_expr
             else:
                 self._substitution_dict[variable_name] = substitute_by
-
-
+                
     def visit_Name(self, node):
+        """Visitor for the Name type, which should be substituted if node.id is in the substitution dictionnary."""
         if node.id in self._substitution_dict:
             return ast.copy_location(self._substitution_dict[node.id], node)
         else:
             return node
         
 class _ReduceTransformer(ast.NodeTransformer):
+    """
+    Transformer to do one step of the reduction of an :class:`ast.AST` expression.
+    
+    For example, if the expression is ``x+y*sin(x**2)+(2+2)``, with ``{'x':3}`` as constant,
+    the result is ``__ExprEvaluator_0+y*__ExprEvaluator_1+__ExprEvaluator_2``, with constants
+    ``{'__ExprEvaluator_0': 3, '__ExprEvaluator_1': 0.4, '__ExprEvaluator_2': 4}``.
+    """
     def __init__(self, constants):
+        """
+        Initialize the tranformer.
+    
+        :param constants: Dictionnary whose key are the variables names, and values are Python values.
+        """        
         self.constants = constants.copy()
-        self.did_something = False
+        self._did_something = False
+        
+    @property
+    def did_something(self):
+        """Return True if the expression has been changed."""
+        return self._did_something
+    
+    @did_something.setter
+    def did_something(self, newvalue):
+        assert newvalue in (True, False)
+        self._did_something = newvalue
         
     def generic_visit(self, node):
-        if not isinstance(node, ast.expr):
+        #No change if the node is not an expression or if it's a Name
+        if not isinstance(node, ast.expr) or isinstance(node, ast.Name):
             return node
         
-        if isinstance(node, ast.Name):
-            return node
-        
+        #Get the expression and try to evaluate it
         expr = ast.copy_location(ast.Expression(body = node), node)
         try:
             ret = eval(compile(expr, '<eval>', mode = 'eval'), globals(), self.constants)
         except NameError as e:
+            #If we have an undefined name, get a step deeper in the tree
             return super().generic_visit(node)
             
         #find a free constant index
@@ -56,17 +88,23 @@ class _ReduceTransformer(ast.NodeTransformer):
             
         const_name = '__ExprEvaluator_{0}'.format(i)
             
+        #Do the substitution
         self.constants[const_name] = ret
         
-        self.did_something = True
+        self._did_something = True
         return ast.copy_location(ast.Name(id = const_name, ctx = ast.Load()), node)
             
 class _ListNames(ast.NodeVisitor):
+    """Visitor to get all names of an :class:`ast.expr`"""
     def __init__(self):
-        self.names = set()
+        self._names = set()
+        
+    @property
+    def names(self):
+        return self._names
 
     def visit_Name(self, node):
-        self.names.add(node.id)
+        self._names.add(node.id)
         return super().generic_visit(node)
     
         
