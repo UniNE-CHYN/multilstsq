@@ -10,7 +10,7 @@ def ast_print(x): # pragma: no cover
         print(None)
     else:
         print(ast.dump(x))
-        
+
 def ast_compare(node1, node2):
     if type(node1) is not type(node2):
         return False
@@ -27,7 +27,7 @@ def ast_compare(node1, node2):
         return all(ast_compare(n1, n2) for n1, n2 in zip(node1, node2))
     else:
         return node1 == node2
-        
+
 class _SubstituteTransformer(ast.NodeTransformer):
     """
     Transformer to replace a variable name by an expression.
@@ -35,13 +35,13 @@ class _SubstituteTransformer(ast.NodeTransformer):
     def __init__(self, substitution_dict):
         """
         Initialize the tranformer.
-        
+
         :param substitution_dict: Dictionnary whose key are the variables names, and values what the variable should be substituted by.
-        
+
         The values can be strings (in which case they are parse by :func:`ast.parse`), :class:`ExprEvaluator` instances, or :class:`ast.AST`.
         """
         assert type(substitution_dict) == dict
-        
+
         self._substitution_dict = {}
         for variable_name, substitute_by in substitution_dict.items():
             if type(substitute_by) == str:
@@ -50,18 +50,24 @@ class _SubstituteTransformer(ast.NodeTransformer):
                 self._substitution_dict[variable_name] = substitute_by._parsed_expr
             else:
                 self._substitution_dict[variable_name] = substitute_by
-                
+
     def visit_Name(self, node):
         """Visitor for the Name type, which should be substituted if node.id is in the substitution dictionnary."""
         if node.id in self._substitution_dict:
             return ast.copy_location(self._substitution_dict[node.id], node)
         else:
             return node
-        
+
+    def visit(self, node):
+        for k, v in self._substitution_dict.items():
+            if ast_compare(node, k):
+                return ast.copy_location(v, node)
+        return super().visit(node)
+
 class _ReduceTransformer(ast.NodeTransformer):
     """
     Transformer to do one step of the reduction of an :class:`ast.AST` expression.
-    
+
     For example, if the expression is ``x+y*sin(x**2)+(2+2)``, with ``{'x':3}`` as constant,
     the result is ``__ExprEvaluator_0+y*__ExprEvaluator_1+__ExprEvaluator_2``, with constants
     ``{'__ExprEvaluator_0': 3, '__ExprEvaluator_1': 0.4, '__ExprEvaluator_2': 4}``.
@@ -69,27 +75,27 @@ class _ReduceTransformer(ast.NodeTransformer):
     def __init__(self, constants):
         """
         Initialize the tranformer.
-    
+
         :param constants: Dictionnary whose key are the variables names, and values are Python values.
-        """        
+        """
         self.constants = constants.copy()
         self._did_something = False
-        
+
     @property
     def did_something(self):
         """Return True if the expression has been changed."""
         return self._did_something
-    
+
     @did_something.setter
     def did_something(self, newvalue):
         assert newvalue in (True, False)
         self._did_something = newvalue
-        
+
     def generic_visit(self, node):
         #No change if the node is not an expression or if it's a Name
         if not isinstance(node, ast.expr) or isinstance(node, ast.Name):
             return node
-        
+
         #Get the expression and try to evaluate it
         expr = ast.copy_location(ast.Expression(body = node), node)
         try:
@@ -97,25 +103,25 @@ class _ReduceTransformer(ast.NodeTransformer):
         except NameError as e:
             #If we have an undefined name, get a step deeper in the tree
             return super().generic_visit(node)
-            
+
         #find a free constant index
         i = 0
         while '__ExprEvaluator_{0}'.format(i) in self.constants:
             i += 1
-            
+
         const_name = '__ExprEvaluator_{0}'.format(i)
-            
+
         #Do the substitution
         self.constants[const_name] = ret
-        
+
         self._did_something = True
         return ast.copy_location(ast.Name(id = const_name, ctx = ast.Load()), node)
-            
+
 class _ListNames(ast.NodeVisitor):
     """Visitor to get all names of an :class:`ast.expr`"""
     def __init__(self):
         self._names = set()
-        
+
     @property
     def names(self):
         return self._names
@@ -123,26 +129,26 @@ class _ListNames(ast.NodeVisitor):
     def visit_Name(self, node):
         self._names.add(node.id)
         return super().generic_visit(node)
-    
-        
+
+
 
 class ExprEvaluator:
     #__ExprEvaluator_i where is is an int are reserved names in expr
-    
+
     def __init__(self, expr, constants = None, enable_caller_modules=True):
         if constants is None:
             constants = {}
-            
+
         self._caller_modules = {}
         if enable_caller_modules:
             frame = inspect.currentframe()
             while frame.f_globals['__name__'].startswith('.'.join(__name__.split('.')[:-1])):
                 frame = frame.f_back
-            
+
             for k, v in itertools.chain(frame.f_locals.items(), frame.f_globals.items()):
                 if k not in self._caller_modules and isinstance(v, types.ModuleType):
                     self._caller_modules[k] = v
-        
+
         self._constants = constants.copy()
         if type(expr) == str:
             self._expr = expr
@@ -150,43 +156,46 @@ class ExprEvaluator:
         elif isinstance(expr, ast.expr):
             self._expr = '<ast.Expr>'
             self._parsed_expr = expr
+        elif type(expr) in (int, float):
+            self._expr = str(expr)
+            self._parsed_expr = ast.parse(str(expr), mode = 'eval').body
         else:
-            raise ValueError("Type {0} is not handled for expr".format(type(expr)))
-        
+            raise TypeError("Type {0} is not handled for expr".format(type(expr)))
+
         #Remove unneeded constants
         for k in set(self._constants.keys()).difference(self.constants):
             del self._constants[k]
-            
+
         self._call_args = None
-        
+
     def substitute(self, substitution_dict = None, constants = None):
         if substitution_dict is not None:
             new_expr = _SubstituteTransformer(substitution_dict).visit(copy.deepcopy(self._parsed_expr))
         else:
             new_expr = self._parsed_expr
-        
+
         if constants is not None:
             new_constants = self._constants.copy()
             for k, v in constants.items():
                 new_constants[k] = v
         else:
             new_constants = self._constants
-            
+
         return ExprEvaluator(new_expr, new_constants)
-    
+
     @property
     def constants(self):
         ln = _ListNames()
         ln.visit(self._parsed_expr)
         return ln.names.intersection(self._constants.keys())
-    
+
     @property
     def variables(self):
         ln = _ListNames()
         ln.visit(self._parsed_expr)
         return ln.names.difference(self._constants.keys())
-    
-        
+
+
     def reduce(self):
         constants_and_modules = self._caller_modules.copy()
         constants_and_modules.update(self._constants)
@@ -197,11 +206,11 @@ class ExprEvaluator:
             new_expr = rt.visit(new_expr)
             reduce_more = rt.did_something
             rt.did_something = False
-            
+
         new_constants = rt.constants
-        
+
         return ExprEvaluator(new_expr, new_constants)
-    
+
     def eval(self):
         reduced_expr = self.reduce()
         if isinstance(reduced_expr._parsed_expr, ast.Name) and reduced_expr._parsed_expr.id in reduced_expr._constants:
@@ -210,22 +219,21 @@ class ExprEvaluator:
             #Not fully reductible, so cannot be evaluated
             remaining_variables = reduced_expr.variables
             raise ValueError("Cannot fully reduce expression, remaining variables: {0}".format(', '.join(remaining_variables)))
-        
+
     def __repr__(self):
         return 'ExprEvaluator({0}, {1!r})'.format(ast.dump(self._parsed_expr), self._constants)
-    
+
     def enable_call(self, variable_list):
         self._call_args = variable_list
-        
+
     def __call__(self, *args):
         if self._call_args is None:
-            raise ValueError("enable_call should be called first!")
+            raise RuntimeError("enable_call should be called first!")
         return self.substitute(None, dict(zip(self._call_args, args))).eval()
-    
-    def to_string(self):
-        #FIXME: use external library...
+
+    def __str__(self):
         return self._to_string(self._parsed_expr)
-    
+
     def _to_string(self, node):
         if isinstance(node, (ast.Str, ast.Bytes)):
             return repr(node.s)
@@ -265,7 +273,18 @@ class ExprEvaluator:
                 op = '**'
             elif isinstance(node.op, ast.FloorDiv):
                 op = '//'
-            #TODO: LShift | RShift | BitOr | BitXor | BitAnd | FloorDiv
+            elif isinstance(node.op, ast.LShift):
+                op = '<<'
+            elif isinstance(node.op, ast.RShift):
+                op = '>>'
+            elif isinstance(node.op, ast.BitOr):
+                op = '|'
+            elif isinstance(node.op, ast.BitXor):
+                op = '^'
+            elif isinstance(node.op, ast.BitAnd):
+                op = '&'
+            else:  # pragma: no cover
+                raise ValueError("Unsupported node.op: {}".format(node.op))
             return '({0}) {1} ({2})'.format(left, op, right)
         elif isinstance(node, ast.Call):
             args = []
@@ -284,34 +303,45 @@ class ExprEvaluator:
         elif isinstance(node, ast.ExtSlice):
             return ', '.join(self._to_string(n) for n in node.dims)
         elif isinstance(node, ast.Slice):
-            if node.lower is None and node.upper is None and node.step is None:
-                return ':'
-        
-        raise ValueError('malformed node or string: ' + ast.dump(node))
-        
-        
-        
-        
+            if node.lower is not None:
+                slice_lower = self._to_string(node.lower)
+            else:
+                slice_lower = ''
+            if node.upper is not None:
+                slice_upper = self._to_string(node.upper)
+            else:
+                slice_upper = ''
+
+            if node.step is None:
+                return '{}:{}'.format(slice_lower, slice_upper)
+            else:
+                return '{}:{}:{}'.format(slice_lower, slice_upper, self._to_string(node.step))
+
+        raise ValueError('malformed node or string: ' + ast.dump(node)) # pragma: no cover
+
+
+
+
 
 class RegrExprEvaluator(ExprEvaluator):
     """Affine expression in b0, b1... bn (bi = linear regression parameters)
-    
+
     Explanatory can be specified as x0, x1, ...xn.
-    
+
     (this is only convention, class should work with other naming)
-    
+
     General form should be: (coeff0)*b0 + (coeff1)*b1 + (coeff2)*b2 + b3
-    
+
     coefficient should be in parentheses, or can be omitted if == 1.
     """
-        
+
     def find_coeff_for(self, variable):
         ret = self._find_coeff_for(variable, self._parsed_expr)
         if ret is None:
             return ExprEvaluator(ast.copy_location(ast.Num(n=0), self._parsed_expr))
         else:
             return ret
-    
+
     def _find_coeff_for(self, variable, expr):
         if isinstance(expr, ast.Name):
             if expr.id == variable:
@@ -337,12 +367,12 @@ class RegrExprEvaluator(ExprEvaluator):
         else:
             #Unknown expr, ignore
             return None
-        
+
     @property
     def parameter_variables(self):
         return ['b{0}'.format(b) for b in sorted(int(x[1:]) for x in self.variables if re.match('^b[0-9]+$', x))]
-    
+
     @property
     def explanatory_variables(self):
         return ['x{0}'.format(x) for x in sorted(int(x[1:]) for x in self.variables if re.match('^x[0-9]+$', x))]
-    
+
