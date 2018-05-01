@@ -22,6 +22,9 @@ class TestExprEvaluator(unittest.TestCase):
         ee = ExprEvaluator('a+(b*c)')
         self.assertEqual(ee.variables, set(['a', 'b', 'c']))
         
+        ee0 = ee.substitute()
+        self.assertEqual(ee0.variables, set(['a', 'b', 'c']))
+        
         ee1 = ee.substitute(None, {'a': 2,})
         self.assertEqual(ee1.variables, set(['b', 'c']))
         self.assertEqual(ee1.constants, set(['a']))
@@ -66,6 +69,10 @@ class TestExprEvaluator(unittest.TestCase):
         self.assertEqual(ee123b.substitute(None, {'b': 4}).eval(), 18)
         self.assertEqual(ee123c.substitute(None, {'c': 10}).eval(), 32)
         
+        import ast
+        eeast = ee.substitute({ast.parse('b*c', mode = 'eval').body: 'd'})
+        print(eeast.variables)
+        
     def test_reduce(self):
         ee = ExprEvaluator('a+(b*c)')
         self.assertEqual(ee.variables, set(['a', 'b', 'c']))
@@ -103,7 +110,7 @@ class TestExprEvaluator(unittest.TestCase):
         
         self.assertEqual(ee123r.eval(), 14)
         
-    def test_substitute_vars(self):
+    def test_substitute_vars_2(self):
         ee = ExprEvaluator('a+(b*c)')
         ee2 = ee.substitute({'a': 'x[0]','b': 'x[1]', 'c': 'x[2]'})
         

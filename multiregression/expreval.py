@@ -5,11 +5,28 @@ import inspect
 import types
 import itertools
 
-def ast_print(x):
+def ast_print(x): # pragma: no cover
     if x is None:
         print(None)
     else:
         print(ast.dump(x))
+        
+def ast_compare(node1, node2):
+    if type(node1) is not type(node2):
+        return False
+    if isinstance(node1, ast.AST):
+        for k, v in vars(node1).items():
+            if k in ('lineno', 'col_offset', 'ctx'):
+                continue
+            if not ast_compare(v, getattr(node2, k)):
+                return False
+        return True
+    elif isinstance(node1, list):
+        if len(node1) != len(node2):
+            return False
+        return all(ast_compare(n1, n2) for n1, n2 in zip(node1, node2))
+    else:
+        return node1 == node2
         
 class _SubstituteTransformer(ast.NodeTransformer):
     """
@@ -23,8 +40,8 @@ class _SubstituteTransformer(ast.NodeTransformer):
         
         The values can be strings (in which case they are parse by :func:`ast.parse`), :class:`ExprEvaluator` instances, or :class:`ast.AST`.
         """
-        if substitution_dict is None:
-            substitution_dict = {}
+        assert type(substitution_dict) == dict
+        
         self._substitution_dict = {}
         for variable_name, substitute_by in substitution_dict.items():
             if type(substitute_by) == str:
