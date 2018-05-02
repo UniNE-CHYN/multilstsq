@@ -13,12 +13,15 @@ class Multiregression:
         self._n_parameters = n_parameters
         self._internal_dtype = internal_dtype
 
-        assert type(self._problem_dimensions) == tuple
-        assert all(type(x) == int for x in self._problem_dimensions)
-        assert type(self._n_parameters) == int
+        if type(self._problem_dimensions) != tuple:
+            raise TypeError("problem_dimensions should be a tuple")
+        if not all(type(x) == int and x>0 for x in self._problem_dimensions):
+            raise TypeError("all dimensions in problem_dimensions should be positive integer values")
+        if type(self._n_parameters) != int or self._n_parameters <= 0:
+            raise TypeError("n_parameters should be a positive integer")
 
-        self._AtA = numpy.zeros(self._problem_dimensions + (self._n_parameters, self._n_parameters), self._internal_dtype)  #(A'A)
-        self._Atb = numpy.zeros(self._problem_dimensions + (self._n_parameters, 1), self._internal_dtype)  #A'b
+        self._XtX = numpy.zeros(self._problem_dimensions + (self._n_parameters, self._n_parameters), self._internal_dtype)  #(X'X)
+        self._Xty = numpy.zeros(self._problem_dimensions + (self._n_parameters, 1), self._internal_dtype)  #X'y
 
         self._mode = MODE_REGRESSION
 
@@ -28,57 +31,72 @@ class Multiregression:
         self._cache_variance = None
 
     def switch_to_variance(self):
-        assert self._mode in (MODE_REGRESSION, MODE_VARIANCE), "Only allowed to switch to variance in regression mode."
+        if self._mode not in (MODE_REGRESSION, MODE_VARIANCE):
+            raise RuntimeError("Only allowed to switch to variance in regression mode.")
         self._mode = MODE_VARIANCE
 
     def switch_to_read_only(self):
         self._mode = MODE_READONLY
 
-    def evaluate_at(self, A):
-        """Evaluate the lhs at A"""
-        assert A.ndim == len(self._problem_dimensions) + 2
-        assert A.shape[:-2] == self._problem_dimensions
-        assert A.shape[-1] == self._n_parameters
-        return self._evaluate_at(A)
+    def __validate_dimensions(self, X=None, y=None, w=None):
+        assert w is None or y is not None, "Should provide y if providing w"
+        assert y is None or X is not None, "Should provide X if providing y"
 
-    def _evaluate_at(self, A):
-        return numpy.einsum('...kj,...jl', A, self.beta)
+        if X is not None and (X.ndim != len(self._problem_dimensions) + 2 or X.shape[:-2] != self._problem_dimensions or X.shape[-1] != self._n_parameters):
+            X_dim_str = ', '.join([str(d) for d in X.shape])
+            dim_str = ', '.join([str(d) for d in self._problem_dimensions]+['<n>',str(self._n_parameters)])
 
-    def add_data(self, A, b, weights = None):
-        assert A.ndim == len(self._problem_dimensions) + 2
-        assert A.shape[:-2] == self._problem_dimensions
-        assert A.shape[-1] == self._n_parameters, "{0}, {1}".format(A.shape, self._n_parameters)
-        assert b.ndim == len(self._problem_dimensions) + 2
-        assert b.shape == self._problem_dimensions + (A.shape[-2], 1)
+            raise ValueError('Wrong dimensions for X ({} instead of {})'.format(X_dim_str, dim_str))
 
-        if weights is not None:
-            assert weights.shape[:-2] == self._problem_dimensions
-            assert weights.shape == b.shape
+        if y is not None and (y.shape != self._problem_dimensions + (X.shape[-2], 1)):
+            y_dim_str = ', '.join([str(d) for d in y.shape])
+            dim_str = ', '.join([str(d) for d in self._problem_dimensions + (X.shape[-2], 1)])
 
-        return self._add_data(A, b, weights)
+            raise ValueError('Wrong dimensions for y ({} instead of {})'.format(y_dim_str, dim_str))
 
-    def _add_data(self, A, b, weights = None):
-        if weights is not None:
-            sweights = numpy.sqrt(weights)
-            A = A * numpy.repeat(sweights, A.shape[-1], sweights.ndim - 1)
-            b = b * sweights
+        if w is not None and (w.shape != y.shape):
+            w_dim_str = ', '.join([str(d) for d in w.shape])
+            dim_str = ', '.join([str(d) for d in y.shape])
+            raise ValueError('Wrong dimensions for w ({} instead of {})'.format(w_dim_str, dim_str))
+
+
+    def evaluate_at(self, X):
+        """Evaluate Xβ"""
+        self.__validate_dimensions(X)
+        return self._evaluate_at(X)
+
+    def _evaluate_at(self, X):
+        return numpy.einsum('...kj,...jl', X, self.beta)
+
+    def add_data(self, X, y, w = None):
+        self.__validate_dimensions(X, y, w)
+
+        if w is not None:
+            assert w.shape[:-2] == self._problem_dimensions
+            assert w.shape == y.shape
+
+        return self._add_data(X, y, w)
+
+    def _add_data(self, X, y, w = None):
+        if w is not None:
+            sweights = numpy.sqrt(w)
+            X = X * numpy.repeat(sweights, X.shape[-1], sweights.ndim - 1)
+            y = y * sweights
         if self._mode == MODE_REGRESSION:
             self._cache_beta = None
-            #Eq to numpy.dot(A.T, A) on last dimensions
-            self._AtA += numpy.einsum('...kj,...kl', A, A)
-            self._Atb += numpy.einsum('...kj,...kl', A, b)
+            #Eq to numpy.dot(X.T, X) on last dimensions
+            self._XtX += numpy.einsum('...kj,...kl', X, X)
+            self._Xty += numpy.einsum('...kj,...kl', X, y)
         elif self._mode == MODE_VARIANCE:
             self._cache_variance = None
-            if self.beta is None:
-                return
 
-            xh = self._evaluate_at(A)
-            my_n_obs = numpy.sum(numpy.sum(A != 0, axis = len(self._problem_dimensions) + 1) != 0, axis = len(self._problem_dimensions))
+            xh = self._evaluate_at(X)
+            my_n_obs = numpy.sum(numpy.sum(X != 0, axis = len(self._problem_dimensions) + 1) != 0, axis = len(self._problem_dimensions))
 
-            self._rss += numpy.sum((xh - b) ** 2, axis = len(self._problem_dimensions))[..., 0]
-            self._n_observations += my_n_obs #A.shape[-2]
+            self._rss += numpy.sum((xh - y) ** 2, axis = len(self._problem_dimensions))[..., 0]
+            self._n_observations += my_n_obs #X.shape[-2]
         else:
-            raise ValueError("Cannot add data when mode=={0}".format(self._mode))
+            raise RuntimeError("Cannot add data when mode=={0}".format(self._mode))
 
     @property
     def _subproblems_iter(self):
@@ -91,8 +109,8 @@ class Multiregression:
             'internal_dtype': self._internal_dtype,
 
             #Regression information
-            'AtA': self._AtA,
-            'Atb': self._Atb,
+            'XtX': self._XtX,
+            'Xty': self._Xty,
             'beta': self.beta,
 
             #Variance information
@@ -106,8 +124,8 @@ class Multiregression:
         self._n_parameters = newstate['n_parameters']
         self._internal_dtype = newstate.get('internal_dtype', numpy.float)
 
-        self._AtA = newstate['AtA']
-        self._Atb = newstate['Atb']
+        self._XtX = newstate['XtX']
+        self._Xty = newstate['Xty']
         self._cache_beta = newstate['beta']
 
         self._n_observations = newstate['n_observations']
@@ -122,32 +140,32 @@ class Multiregression:
     def beta(self):
         """The linear coefficients that minimize the least squares criterion."""
         if self._cache_beta is None:
-            self._cache_beta = numpy.ma.masked_all(self._Atb.shape, dtype = numpy.float)
+            self._cache_beta = numpy.ma.masked_all(self._Xty.shape, dtype = numpy.float)
 
             #Speedup for simple cases, computed by maxima
-            if self._Atb.shape[-2] == 1:
+            if self._Xty.shape[-2] == 1:
                 #fortran(invert_by_lu(matrix([a[0,0]])).matrix([b[0,0]]));
-                self._cache_beta[...,0,0] = self._Atb[...,0,0]/self._AtA[...,0,0]
-            elif self._Atb.shape[-2] == 2:
+                self._cache_beta[...,0,0] = self._Xty[...,0,0]/self._XtX[...,0,0]
+            elif self._Xty.shape[-2] == 2:
                 #fortran(invert_by_lu(matrix([a[0,0],a[0,1]],[a[1,0],a[1,1]])).matrix([b[0,0]],[b[1,0]]));
-                self._cache_beta[...,0,0] = self._Atb[...,0,0]*(self._AtA[...,0,1]*self._AtA[...,1,0]/(self._AtA[...,0,0]*(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0]))+1)/self._AtA[...,0,0]-self._AtA[...,0,1]*self._Atb[...,1,0]/(self._AtA[...,0,0]*(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0]))
-                self._cache_beta[...,1,0] = self._Atb[...,1,0]/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._Atb[...,0,0]*self._AtA[...,1,0]/(self._AtA[...,0,0]*(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0]))
+                self._cache_beta[...,0,0] = self._Xty[...,0,0]*(self._XtX[...,0,1]*self._XtX[...,1,0]/(self._XtX[...,0,0]*(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0]))+1)/self._XtX[...,0,0]-self._XtX[...,0,1]*self._Xty[...,1,0]/(self._XtX[...,0,0]*(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0]))
+                self._cache_beta[...,1,0] = self._Xty[...,1,0]/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._Xty[...,0,0]*self._XtX[...,1,0]/(self._XtX[...,0,0]*(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0]))
 
-            elif self._Atb.shape[-2] == 3:
+            elif self._Xty.shape[-2] == 3:
                 #fortran(invert_by_lu(matrix([a[0,0],a[0,1],a[0,2]],[a[1,0],a[1,1],a[1,2]],[a[2,0],a[2,1],a[2,2]])).matrix([b[0,0]],[b[1,0]],[b[2,0]]))
-                self._cache_beta[...,0,0] = self._Atb[...,0,0]*(-self._AtA[...,0,1]*(-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,1,0]*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,0,0]*(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0]))-self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0])-self._AtA[...,1,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*(self._AtA[...,1,0]*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,0,0]*(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0]))-self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0])+1)/self._AtA[...,0,0]+self._Atb[...,1,0]*(self._AtA[...,0,2]*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/((self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0]))-self._AtA[...,0,1]*((self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/((self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0]))+1)/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0]))/self._AtA[...,0,0]+self._Atb[...,2,0]*(self._AtA[...,0,1]*(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])/((self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0]))-self._AtA[...,0,2]/(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0]))/self._AtA[...,0,0]
-                self._cache_beta[...,1,0] = self._Atb[...,0,0]*(-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,1,0]*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,0,0]*(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0]))-self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0])-self._AtA[...,1,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])+self._Atb[...,1,0]*((self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/((self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0]))+1)/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*self._Atb[...,2,0]/((self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0]))
-                self._cache_beta[...,2,0] = self._Atb[...,0,0]*(self._AtA[...,1,0]*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,0,0]*(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0]))-self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0])-self._Atb[...,1,0]*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/((self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0]))+self._Atb[...,2,0]/(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0])
+                self._cache_beta[...,0,0] = self._Xty[...,0,0]*(-self._XtX[...,0,1]*(-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,1,0]*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,0,0]*(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0]))-self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0])-self._XtX[...,1,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*(self._XtX[...,1,0]*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,0,0]*(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0]))-self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0])+1)/self._XtX[...,0,0]+self._Xty[...,1,0]*(self._XtX[...,0,2]*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/((self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0]))-self._XtX[...,0,1]*((self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/((self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0]))+1)/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0]))/self._XtX[...,0,0]+self._Xty[...,2,0]*(self._XtX[...,0,1]*(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])/((self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0]))-self._XtX[...,0,2]/(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0]))/self._XtX[...,0,0]
+                self._cache_beta[...,1,0] = self._Xty[...,0,0]*(-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,1,0]*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,0,0]*(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0]))-self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0])-self._XtX[...,1,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])+self._Xty[...,1,0]*((self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/((self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0]))+1)/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*self._Xty[...,2,0]/((self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0]))
+                self._cache_beta[...,2,0] = self._Xty[...,0,0]*(self._XtX[...,1,0]*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,0,0]*(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0]))-self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0])-self._Xty[...,1,0]*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/((self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0]))+self._Xty[...,2,0]/(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0])
 
             else:
                 for problem_index in self._subproblems_iter:
                     #This should be, by construction, symmetric
-                    #assert(numpy.all(self._AtA == self._AtA.T))
+                    #assert(numpy.all(self._XtX == self._XtX.T))
                     #FIXME: check at some other place
 
                     try:
-                        self._cache_beta[problem_index] = numpy.linalg.solve(self._AtA[problem_index], self._Atb[problem_index])
-                    except:
+                        self._cache_beta[problem_index] = numpy.linalg.solve(self._XtX[problem_index], self._Xty[problem_index])
+                    except:  #In case of non-solvability
                         pass
         return self._cache_beta
 
@@ -155,36 +173,36 @@ class Multiregression:
     def variance(self):
         """Returns the variance/covariance matrix."""
         if self._cache_variance is None:
-            self._cache_variance = numpy.ma.masked_all_like(self._AtA)
+            self._cache_variance = numpy.ma.masked_all_like(self._XtX)
 
             d = self._n_observations - self._n_parameters
 
-            if self._AtA.shape[-2] == 1:
+            if self._XtX.shape[-2] == 1:
                 #fortran(invert_by_lu(matrix([a[0,0]])));
-                self._cache_variance[..., 0, 0] = 1 / self._AtA[..., 0, 0]
+                self._cache_variance[..., 0, 0] = 1 / self._XtX[..., 0, 0]
                 self._cache_variance *= (self._rss / d)[..., numpy.newaxis, numpy.newaxis]
-            elif self._AtA.shape[-2] == 2:
-                self._cache_variance[..., 0, 0] = (self._AtA[...,0,1]*self._AtA[...,1,0]/(self._AtA[...,0,0]*(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0]))+1)/self._AtA[...,0,0]
-                self._cache_variance[..., 0, 1] = -self._AtA[...,0,1]/(self._AtA[...,0,0]*(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0]))
-                self._cache_variance[..., 1, 0] = -self._AtA[...,1,0]/(self._AtA[...,0,0]*(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0]))
-                self._cache_variance[..., 1, 1] = 1/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])
+            elif self._XtX.shape[-2] == 2:
+                self._cache_variance[..., 0, 0] = (self._XtX[...,0,1]*self._XtX[...,1,0]/(self._XtX[...,0,0]*(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0]))+1)/self._XtX[...,0,0]
+                self._cache_variance[..., 0, 1] = -self._XtX[...,0,1]/(self._XtX[...,0,0]*(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0]))
+                self._cache_variance[..., 1, 0] = -self._XtX[...,1,0]/(self._XtX[...,0,0]*(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0]))
+                self._cache_variance[..., 1, 1] = 1/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])
                 self._cache_variance *= (self._rss / d)[..., numpy.newaxis, numpy.newaxis]
-            elif self._AtA.shape[-2] == 3:
-                self._cache_variance[..., 0, 0] = (-self._AtA[...,0,1]*(-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,1,0]*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,0,0]*(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0]))-self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0])-self._AtA[...,1,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*(self._AtA[...,1,0]*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,0,0]*(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0]))-self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0])+1)/self._AtA[...,0,0]
-                self._cache_variance[..., 0, 1] = (self._AtA[...,0,2]*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/((self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0]))-self._AtA[...,0,1]*((self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/((self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0]))+1)/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0]))/self._AtA[...,0,0],
-                self._cache_variance[..., 0, 2] = (self._AtA[...,0,1]*(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])/((self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0]))-self._AtA[...,0,2]/(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0]))/self._AtA[...,0,0]
-                self._cache_variance[..., 1, 0] = (-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,1,0]*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,0,0]*(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0]))-self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0])-self._AtA[...,1,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])
-                self._cache_variance[..., 1, 1] = ((self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/((self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0]))+1)/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])
-                self._cache_variance[..., 1, 2] = -(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])/((self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0]))
-                self._cache_variance[..., 2, 0] = (self._AtA[...,1,0]*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,0,0]*(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0]))-self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0])
-                self._cache_variance[..., 2, 1] = -(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/((self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0]))
-                self._cache_variance[..., 2, 2] = 1/(self._AtA[...,2,2]-(self._AtA[...,1,2]-self._AtA[...,0,2]*self._AtA[...,1,0]/self._AtA[...,0,0])*(self._AtA[...,2,1]-self._AtA[...,0,1]*self._AtA[...,2,0]/self._AtA[...,0,0])/(self._AtA[...,1,1]-self._AtA[...,0,1]*self._AtA[...,1,0]/self._AtA[...,0,0])-self._AtA[...,0,2]*self._AtA[...,2,0]/self._AtA[...,0,0])
+            elif self._XtX.shape[-2] == 3:
+                self._cache_variance[..., 0, 0] = (-self._XtX[...,0,1]*(-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,1,0]*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,0,0]*(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0]))-self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0])-self._XtX[...,1,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*(self._XtX[...,1,0]*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,0,0]*(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0]))-self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0])+1)/self._XtX[...,0,0]
+                self._cache_variance[..., 0, 1] = (self._XtX[...,0,2]*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/((self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0]))-self._XtX[...,0,1]*((self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/((self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0]))+1)/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0]))/self._XtX[...,0,0]
+                self._cache_variance[..., 0, 2] = (self._XtX[...,0,1]*(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])/((self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0]))-self._XtX[...,0,2]/(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0]))/self._XtX[...,0,0]
+                self._cache_variance[..., 1, 0] = (-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,1,0]*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,0,0]*(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0]))-self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0])-self._XtX[...,1,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])
+                self._cache_variance[..., 1, 1] = ((self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/((self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0]))+1)/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])
+                self._cache_variance[..., 1, 2] = -(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])/((self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0]))
+                self._cache_variance[..., 2, 0] = (self._XtX[...,1,0]*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,0,0]*(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0]))-self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0])
+                self._cache_variance[..., 2, 1] = -(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/((self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0]))
+                self._cache_variance[..., 2, 2] = 1/(self._XtX[...,2,2]-(self._XtX[...,1,2]-self._XtX[...,0,2]*self._XtX[...,1,0]/self._XtX[...,0,0])*(self._XtX[...,2,1]-self._XtX[...,0,1]*self._XtX[...,2,0]/self._XtX[...,0,0])/(self._XtX[...,1,1]-self._XtX[...,0,1]*self._XtX[...,1,0]/self._XtX[...,0,0])-self._XtX[...,0,2]*self._XtX[...,2,0]/self._XtX[...,0,0])
 
                 self._cache_variance *= (self._rss / d)[..., numpy.newaxis, numpy.newaxis]
             else:
                 for problem_index in self._subproblems_iter:
                     try:
-                        self._cache_variance[problem_index] = numpy.linalg.inv(self._AtA[problem_index]) * self._rss[problem_index] / d[problem_index]
+                        self._cache_variance[problem_index] = numpy.linalg.inv(self._XtX[problem_index]) * self._rss[problem_index] / d[problem_index]
                     except:
                         pass
 
@@ -214,6 +232,8 @@ class Multiregression:
 class ModelMultiregression(Multiregression):
     def __init__(self, problem_dimensions, model_str, internal_dtype = numpy.float):
         self._build_expressions(problem_dimensions, model_str)
+        if len(self._base_model.parameter_variables) == 0:
+            raise ValueError("Model should have at least 1 parameter")
         Multiregression.__init__(self, problem_dimensions, len(self._base_model.parameter_variables), internal_dtype)
 
     def _build_expressions(self, problem_dimensions, model_str):
@@ -230,19 +250,19 @@ class ModelMultiregression(Multiregression):
             )
         else:
             self._conversion_expression = ExprEvaluator(
-                'numpy.empty({0}+(A.shape[-2],0))'.format(problem_dimensions)
+                'numpy.empty({0}+(X.shape[-2],0))'.format(problem_dimensions)
             )
         self._conversion_expression = self._conversion_expression.substitute(
             dict((var, self._base_model.find_coeff_for(var)) for var in self._base_model.parameter_variables)
         )
         self._conversion_expression = self._conversion_expression.substitute(
-            dict((var, 'A[..., :, {0}]'.format(var[1:])) for var in self._base_model.explanatory_variables),
+            dict((var, 'X[..., :, {0}]'.format(var[1:])) for var in self._base_model.explanatory_variables),
         )
 
         self._apply_expression = self._base_model.substitute(
             dict((var, "beta[...,{0},:]".format(idx)) for idx, var in enumerate(self._base_model.parameter_variables))
         ).substitute(
-            dict((var, 'A[..., :, {0}]'.format(var[1:])) for var in self._base_model.explanatory_variables),
+            dict((var, 'X[..., :, {0}]'.format(var[1:])) for var in self._base_model.explanatory_variables),
         )
 
         self._apply_expression = ExprEvaluator('x[...,0]').substitute({'x': self._apply_expression,})
@@ -255,61 +275,59 @@ class ModelMultiregression(Multiregression):
     def beta_names(self):
         return self._base_model.parameter_variables
 
-    def add_data(self, A, b, weights = None):
-        assert A.ndim == len(self._problem_dimensions) + 2
-        assert A.shape[:-2] == self._problem_dimensions
-        assert A.shape[-1] >= self._n_explanatory_min
-        assert b.ndim == len(self._problem_dimensions) + 2
-        assert b.shape == self._problem_dimensions + (A.shape[-2], 1)
+    def __validate_dimensions(self, X=None, y=None, w=None):
+        assert w is None or y is not None, "Should provide y if providing w"
+        assert y is None or X is not None, "Should provide X if providing y"
 
-        if weights is not None:
-            assert weights.shape == b.shape
+        if X is not None and (X.ndim != len(self._problem_dimensions) + 2 or X.shape[:-2] != self._problem_dimensions or X.shape[-1] < self._n_explanatory_min):
+            X_dim_str = ', '.join([str(d) for d in X.shape])
+            dim_str = ', '.join([str(d) for d in self._problem_dimensions]+['<n>', '>=' + str(self._n_explanatory_min)])
 
-        new_A = self._conversion_expression.substitute(None, {'o_dim': A.shape[:-1], 'A': A,}).eval()
+            raise ValueError('Wrong dimensions for X ({} instead of {})'.format(X_dim_str, dim_str))
 
-        maskA = None
-        maskb = None
-        if isinstance(A, numpy.ma.MaskedArray) and A.mask.shape == A.shape:
-            maskA = numpy.any(A.mask, axis = len(self._problem_dimensions) + 1)
-            new_A = new_A.data.copy()
-            new_A[maskA] = 0
-        if isinstance(b, numpy.ma.MaskedArray) and b.mask.shape == b.shape:
-            maskb = numpy.any(b.mask, axis = len(self._problem_dimensions) + 1)
-            b = b.data.copy()
-            b[maskb] = 0
+        if y is not None and (y.shape != self._problem_dimensions + (X.shape[-2], 1)):
+            y_dim_str = ', '.join([str(d) for d in y.shape])
+            dim_str = ', '.join([str(d) for d in self._problem_dimensions + (X.shape[-2], 1)])
 
-        if maskA is not None or maskb is not None:
+            raise ValueError('Wrong dimensions for y ({} instead of {})'.format(y_dim_str, dim_str))
+
+        if w is not None and (w.shape != y.shape):
+            w_dim_str = ', '.join([str(d) for d in w.shape])
+            dim_str = ', '.join([str(d) for d in y.shape])
+            raise ValueError('Wrong dimensions for w ({} instead of {})'.format(w_dim_str, dim_str))
+
+
+    def add_data(self, X, y, w = None):
+        self.__validate_dimensions(X, y, w)
+
+        X_new = self._conversion_expression.substitute(None, {'o_dim': X.shape[:-1], 'X': X,}).eval()
+
+        X_mask = None
+        y_mask = None
+        if isinstance(X, numpy.ma.MaskedArray) and X.mask.shape == X.shape:
+            X_mask = numpy.any(X.mask, axis = len(self._problem_dimensions) + 1)
+            X_new = X_new.data.copy()
+            X_new[X_mask] = 0
+        if isinstance(y, numpy.ma.MaskedArray) and y.mask.shape == y.shape:
+            y_mask = numpy.any(y.mask, axis = len(self._problem_dimensions) + 1)
+            y = y.data.copy()
+            y[y_mask] = 0
+
+        if X_mask is not None or y_mask is not None:
             #generate valid
-            if maskA is not None and maskb is not None:
-                valid = ~numpy.logical_or(maskA, maskb)
-            elif maskA is not None:
-                valid = ~maskA
-            elif maskb is not None:
-                valid = ~maskb
+            if X_mask is not None and y_mask is not None:
+                valid = ~numpy.logical_or(X_mask, y_mask)
+            elif X_mask is not None:
+                valid = ~X_mask
+            elif y_mask is not None:
+                valid = ~y_mask
 
-            validA = numpy.repeat(valid[..., :, numpy.newaxis], new_A.shape[-1], len(self._problem_dimensions) + 1)
+            X_valid = numpy.repeat(valid[..., :, numpy.newaxis], X_new.shape[-1], len(self._problem_dimensions) + 1)
             validb = valid[..., :, numpy.newaxis]
 
-            return super().add_data(new_A * validA, b * validb, weights)
+            return super().add_data(X_new * X_valid, y * validb, w)
         else:
-            return super().add_data(new_A, b, weights)
-
-    def get_confidence_intervals(self, X, pvalue):
-        assert X.ndim == len(self._problem_dimensions) + 2
-        assert X.shape[:-2] == self._problem_dimensions
-        assert X.shape[-1] >= self._n_explanatory_min
-
-        new_X = self._conversion_expression.substitute(None, {'o_dim': X.shape[:-1], 'A': X,}).eval()
-        return super().get_confidence_intervals(new_X, pvalue)
-
-    def get_prediction_intervals(self, X, pvalue):
-        assert X.ndim == len(self._problem_dimensions) + 2
-        assert X.shape[:-2] == self._problem_dimensions
-        assert X.shape[-1] >= self._n_explanatory_min
-
-        new_X = self._conversion_expression.substitute(None, {'o_dim': X.shape[:-1], 'A': X,}).eval()
-        return super().get_prediction_intervals(new_X, pvalue)
-
+            return super().add_data(X_new, y, w)
 
     def get_expr_for_idx(self, pb_idx):
         assert type(pb_idx) == tuple

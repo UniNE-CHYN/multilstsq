@@ -21,7 +21,33 @@ class TestMultiregression(unittest.TestCase):
 
             mr.switch_to_variance()
 
+        mr.switch_to_read_only()
+
+        with self.assertRaises(RuntimeError):
+            mr.add_data(A, b)
+
+        with self.assertRaises(RuntimeError):
+            mr.switch_to_variance()
+
         return mr
+
+    def test_type_validation(self):
+        with self.assertRaises(TypeError):
+            mr = Multiregression([], 1)
+        with self.assertRaises(TypeError):
+            mr = Multiregression((0, 1), 1)
+        with self.assertRaises(TypeError):
+            mr = Multiregression((-1, 1), 1)
+        with self.assertRaises(TypeError):
+            mr = Multiregression((), -1)
+
+        mr = Multiregression((), 2)
+        with self.assertRaises(ValueError):
+            mr.add_data(numpy.array([]), numpy.array([]))
+        with self.assertRaises(ValueError):
+            mr.add_data(numpy.array([[1, 1]]), numpy.array([]))
+        with self.assertRaises(ValueError):
+            mr.add_data(numpy.array([[1, 1]]), numpy.array([[1]]), numpy.array([]))
 
     def test_simple_one_by_one(self):
         mr = self._construct_mr_step_by_step()
@@ -45,8 +71,8 @@ class TestMultiregression(unittest.TestCase):
 
         mrss = self._construct_mr_step_by_step()
 
-        numpy.testing.assert_array_almost_equal(mr._AtA, mrss._AtA)
-        numpy.testing.assert_array_almost_equal(mr._Atb, mrss._Atb)
+        numpy.testing.assert_array_almost_equal(mr._XtX, mrss._XtX)
+        numpy.testing.assert_array_almost_equal(mr._Xty, mrss._Xty)
 
         numpy.testing.assert_array_almost_equal(mr._rss, mrss._rss)
         numpy.testing.assert_array_almost_equal(mr._n_observations, mrss._n_observations)
@@ -57,6 +83,17 @@ class TestMultiregression(unittest.TestCase):
         #variance is the variance-covariance matrix
         self.assertAlmostEqual(mr.variance[0, 0], 8.63185, 5)
         self.assertAlmostEqual(mr.variance[1, 1], 3.1539, 4)
+
+        self.assertAlmostEqual(mr.sigma_2, 0.57619680)
+
+    def test_weights(self):
+        mr = Multiregression((), 1)
+        mr.add_data(numpy.array([[1], [1]]), numpy.array([[0], [3]]), w=numpy.array([[1], [2]]))
+        self.assertAlmostEqual(mr.beta[0], 2, 5)
+
+    def test_empty(self):
+        mr = Multiregression((), 1)
+        print(mr.beta)
 
     def test_1d_all_at_once(self):
         mr = Multiregression((3, ), 2)
@@ -73,12 +110,12 @@ class TestMultiregression(unittest.TestCase):
 
         mrss = self._construct_mr_step_by_step()
 
-        numpy.testing.assert_array_almost_equal(mr._AtA[0], mrss._AtA)
-        numpy.testing.assert_array_almost_equal(mr._AtA[1], mrss._AtA)
-        numpy.testing.assert_array_almost_equal(mr._AtA[2], mrss._AtA)
-        numpy.testing.assert_array_almost_equal(mr._Atb[0], mrss._Atb)
-        numpy.testing.assert_array_almost_equal(mr._Atb[1], mrss._Atb)
-        numpy.testing.assert_array_almost_equal(mr._Atb[2], mrss._Atb)
+        numpy.testing.assert_array_almost_equal(mr._XtX[0], mrss._XtX)
+        numpy.testing.assert_array_almost_equal(mr._XtX[1], mrss._XtX)
+        numpy.testing.assert_array_almost_equal(mr._XtX[2], mrss._XtX)
+        numpy.testing.assert_array_almost_equal(mr._Xty[0], mrss._Xty)
+        numpy.testing.assert_array_almost_equal(mr._Xty[1], mrss._Xty)
+        numpy.testing.assert_array_almost_equal(mr._Xty[2], mrss._Xty)
 
         numpy.testing.assert_array_almost_equal(mr._rss[0], mrss._rss)
         numpy.testing.assert_array_almost_equal(mr._rss[1], mrss._rss)
@@ -113,14 +150,14 @@ class TestMultiregression(unittest.TestCase):
 
         mrss = self._construct_mr_step_by_step()
 
-        numpy.testing.assert_array_almost_equal(mr._AtA[0, 0], mrss._AtA)
-        numpy.testing.assert_array_almost_equal(mr._AtA[0, 1], mrss._AtA)
-        numpy.testing.assert_array_almost_equal(mr._AtA[1, 0], mrss._AtA)
-        numpy.testing.assert_array_almost_equal(mr._AtA[1, 1], mrss._AtA)
-        numpy.testing.assert_array_almost_equal(mr._Atb[0, 0], mrss._Atb)
-        numpy.testing.assert_array_almost_equal(mr._Atb[0, 1], mrss._Atb)
-        numpy.testing.assert_array_almost_equal(mr._Atb[1, 0], mrss._Atb)
-        numpy.testing.assert_array_almost_equal(mr._Atb[1, 1], mrss._Atb)
+        numpy.testing.assert_array_almost_equal(mr._XtX[0, 0], mrss._XtX)
+        numpy.testing.assert_array_almost_equal(mr._XtX[0, 1], mrss._XtX)
+        numpy.testing.assert_array_almost_equal(mr._XtX[1, 0], mrss._XtX)
+        numpy.testing.assert_array_almost_equal(mr._XtX[1, 1], mrss._XtX)
+        numpy.testing.assert_array_almost_equal(mr._Xty[0, 0], mrss._Xty)
+        numpy.testing.assert_array_almost_equal(mr._Xty[0, 1], mrss._Xty)
+        numpy.testing.assert_array_almost_equal(mr._Xty[1, 0], mrss._Xty)
+        numpy.testing.assert_array_almost_equal(mr._Xty[1, 1], mrss._Xty)
 
         numpy.testing.assert_array_almost_equal(mr._rss[0, 0], mrss._rss)
         numpy.testing.assert_array_almost_equal(mr._rss[0, 1], mrss._rss)
@@ -156,14 +193,14 @@ class TestMultiregression(unittest.TestCase):
 
         mrss = self._construct_mr_step_by_step()
 
-        numpy.testing.assert_array_almost_equal(mr._AtA[0, 0], mrss._AtA)
-        numpy.testing.assert_array_almost_equal(mr._AtA[0, 1], mrss._AtA)
-        numpy.testing.assert_array_almost_equal(mr._AtA[1, 0], mrss._AtA)
-        numpy.testing.assert_array_almost_equal(mr._AtA[1, 1], mrss._AtA)
-        numpy.testing.assert_array_almost_equal(mr._Atb[0, 0], mrss._Atb)
-        numpy.testing.assert_array_almost_equal(mr._Atb[0, 1], mrss._Atb)
-        numpy.testing.assert_array_almost_equal(mr._Atb[1, 0], mrss._Atb)
-        numpy.testing.assert_array_almost_equal(mr._Atb[1, 1], mrss._Atb)
+        numpy.testing.assert_array_almost_equal(mr._XtX[0, 0], mrss._XtX)
+        numpy.testing.assert_array_almost_equal(mr._XtX[0, 1], mrss._XtX)
+        numpy.testing.assert_array_almost_equal(mr._XtX[1, 0], mrss._XtX)
+        numpy.testing.assert_array_almost_equal(mr._XtX[1, 1], mrss._XtX)
+        numpy.testing.assert_array_almost_equal(mr._Xty[0, 0], mrss._Xty)
+        numpy.testing.assert_array_almost_equal(mr._Xty[0, 1], mrss._Xty)
+        numpy.testing.assert_array_almost_equal(mr._Xty[1, 0], mrss._Xty)
+        numpy.testing.assert_array_almost_equal(mr._Xty[1, 1], mrss._Xty)
 
         numpy.testing.assert_array_almost_equal(mr._rss[0, 0], mrss._rss)
         numpy.testing.assert_array_almost_equal(mr._rss[0, 1], mrss._rss)
@@ -269,16 +306,38 @@ class TestMultiregression(unittest.TestCase):
         self.assertAlmostEqual(mmr.variance[0, 0], 8.63185, 5)
         self.assertAlmostEqual(mmr.variance[1, 1], 3.1539, 4)
 
+    def test_model_multiregression_validation(self):
+        with self.assertRaises(ValueError):
+            mmr = ModelMultiregression((), '1')
+
+        mmr = ModelMultiregression((), 'b0+b1*x0')
+        self.assertEqual('b0+b1*x0', mmr.base_model_str)
+        self.assertEqual(set(mmr.beta_names), {'b0', 'b1'})
+
+        with self.assertRaises(ValueError):
+            mmr.add_data(numpy.array([]), numpy.array([]))
+        with self.assertRaises(ValueError):
+            mmr.add_data(numpy.array([[1, 1]]), numpy.array([]))
+        with self.assertRaises(ValueError):
+            mmr.add_data(numpy.array([[1, 1]]), numpy.array([[1]]), numpy.array([]))
+
     def test_model_multiregression_simple_masked_at_once(self):
         mmr = ModelMultiregression((), 'b0+b1*x0')
 
-        A = numpy.array(self.x_i)[:, numpy.newaxis]
-        b = numpy.array(self.y_i)[:, numpy.newaxis]
+        Ao = numpy.array(self.x_i)[:, numpy.newaxis]
+        bo = numpy.array(self.y_i)[:, numpy.newaxis]
 
-        A = numpy.ma.vstack((A, numpy.ma.masked_all((5, 1))))
-        b = numpy.ma.vstack((b, numpy.ma.masked_all((5, 1))))
+        Am = numpy.ma.masked_all_like(Ao)
+        bm = numpy.ma.masked_all_like(bo)
+
+        A = numpy.ma.vstack((Ao, numpy.ma.masked_all((5, 1))))
+        b = numpy.ma.vstack((bo, numpy.ma.masked_all((5, 1))))
+
+
 
         for i in range(2):
+            mmr.add_data(Am, bo)
+            mmr.add_data(Ao, bm)
             mmr.add_data(A, b)
             mmr.switch_to_variance()
 
@@ -302,6 +361,10 @@ class TestMultiregression(unittest.TestCase):
             mmr.add_data(A, b)
             mmr.switch_to_variance()
 
+        import pickle
+
+        mmr2 = pickle.loads(pickle.dumps(mmr))
+
         for i in range(3):
             #x is a vertical vector contataining the solution
             self.assertAlmostEqual(mmr.beta[i][0, 0], -39.062, 3)
@@ -309,6 +372,12 @@ class TestMultiregression(unittest.TestCase):
             #variance is the variance-covariance matrix
             self.assertAlmostEqual(mmr.variance[i][0, 0], 8.63185, 5)
             self.assertAlmostEqual(mmr.variance[i][1, 1], 3.1539, 4)
+
+            self.assertAlmostEqual(mmr.get_expr_for_idx((i, ))(1), 22.21023062)
+
+            self.assertAlmostEqual(mmr2.get_expr_for_idx((i, ))(1), 22.21023062)
+
+        numpy.testing.assert_almost_equal(mmr.apply_expr.substitute(None, {'X': numpy.array([[[1]], [[1]], [[1]]])}).eval(), numpy.array([22.21023062, 22.21023062, 22.21023062]))
 
     def test_model_multiregression_complex(self):
         pmr = ModelMultiregression((), 'b0+b1*x0+b2*x1')
@@ -330,6 +399,26 @@ class TestMultiregression(unittest.TestCase):
         pmr.add_data(A, b)
 
         print(pmr.beta)
+
+    def test_regression_vs_numpy(self):
+        for dim in range(1, 5):
+            X = numpy.random.normal(size=(dim*2, dim))
+            y = numpy.random.normal(size=(dim*2, 1))
+
+            Xmr = numpy.array([numpy.zeros_like(X), X])
+            ymr = numpy.array([numpy.zeros_like(y), y])
+
+            mr = Multiregression((2, ), dim)
+            mr.add_data(Xmr, ymr)
+            mr.switch_to_variance()
+            mr.add_data(Xmr, ymr)
+
+            beta_hat = mr.beta[1]
+            beta_cov = mr.variance
+
+            #FIXME: is there a way to compute the covariance with numpy directly?
+            numpy.testing.assert_almost_equal(beta_hat, numpy.linalg.lstsq(X, y, rcond=None)[0])
+
 
 if __name__ == '__main__':
     unittest.main()
