@@ -3,7 +3,7 @@
 Expression evaluator
 ====================
 
-.. automodule:: multiregression.expreval
+.. automodule:: multilstsq.expreval
    :members:
    :member-order: bysource
    :special-members:

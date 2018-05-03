@@ -1,9 +1,9 @@
-.. multiregression documentation master file, created by
+.. multilstsq documentation master file, created by
    sphinx-quickstart on Tue Mar  6 14:24:38 2018.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to multiregression's documentation!
+Welcome to multilstsq's documentation!
 ===========================================
 
 Contents:

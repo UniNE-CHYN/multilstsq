@@ -3,8 +3,8 @@ import sys
 import unittest
 import ast
 
-from multiregression import ExprEvaluator, RegrExprEvaluator
-from multiregression.expreval import ast_compare
+from multilstsq import ExprEvaluator, RegrExprEvaluator
+from multilstsq.expreval import ast_compare
 
 class TestExprEvaluator(unittest.TestCase):
 

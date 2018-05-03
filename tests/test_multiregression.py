@@ -1,9 +1,9 @@
 import numpy
 import sys
 import unittest
-from multiregression import Multiregression, ModelMultiregression
+from multilstsq import MultiLstSq, ModelMultiLstSq
 
-class TestMultiregression(unittest.TestCase):
+class TestMultiLstSq(unittest.TestCase):
     x_i = [1.47, 1.50, 1.52, 1.55, 1.57, 1.60, 1.63, 1.65, 1.68, 1.70, 1.73, 1.75, 1.78, 1.80, 1.83]
     y_i = [52.21, 53.12, 54.48, 55.84, 57.20, 58.57, 59.93, 61.29, 63.11, 64.47, 66.28, 68.10, 69.92, 72.19, 74.46]
 
@@ -11,7 +11,7 @@ class TestMultiregression(unittest.TestCase):
         pass
 
     def _construct_mr_step_by_step(self):
-        mr = Multiregression((), 2)
+        mr = MultiLstSq((), 2)
 
         for i in range(2):
             for x, y in zip(self.x_i, self.y_i):
@@ -33,15 +33,15 @@ class TestMultiregression(unittest.TestCase):
 
     def test_type_validation(self):
         with self.assertRaises(TypeError):
-            mr = Multiregression([], 1)
+            mr = MultiLstSq([], 1)
         with self.assertRaises(TypeError):
-            mr = Multiregression((0, 1), 1)
+            mr = MultiLstSq((0, 1), 1)
         with self.assertRaises(TypeError):
-            mr = Multiregression((-1, 1), 1)
+            mr = MultiLstSq((-1, 1), 1)
         with self.assertRaises(TypeError):
-            mr = Multiregression((), -1)
+            mr = MultiLstSq((), -1)
 
-        mr = Multiregression((), 2)
+        mr = MultiLstSq((), 2)
         with self.assertRaises(ValueError):
             mr.add_data(numpy.array([]), numpy.array([]))
         with self.assertRaises(ValueError):
@@ -60,7 +60,7 @@ class TestMultiregression(unittest.TestCase):
         self.assertAlmostEqual(mr.variance[1, 1], 3.1539, 4)
 
     def test_simple_all_at_once(self):
-        mr = Multiregression((), 2)
+        mr = MultiLstSq((), 2)
 
         A = numpy.hstack((numpy.ones((len(self.x_i), 1)), numpy.array(self.x_i)[:, numpy.newaxis]))
         b = numpy.array(self.y_i)[:, numpy.newaxis]
@@ -87,16 +87,16 @@ class TestMultiregression(unittest.TestCase):
         self.assertAlmostEqual(mr.sigma_2, 0.57619680)
 
     def test_weights(self):
-        mr = Multiregression((), 1)
+        mr = MultiLstSq((), 1)
         mr.add_data(numpy.array([[1], [1]]), numpy.array([[0], [3]]), w=numpy.array([[1], [2]]))
         self.assertAlmostEqual(mr.beta[0], 2, 5)
 
     def test_empty(self):
-        mr = Multiregression((), 1)
+        mr = MultiLstSq((), 1)
         print(mr.beta)
 
     def test_1d_all_at_once(self):
-        mr = Multiregression((3, ), 2)
+        mr = MultiLstSq((3, ), 2)
 
         A = numpy.hstack((numpy.ones((len(self.x_i), 1)), numpy.array(self.x_i)[:, numpy.newaxis]))
         b = numpy.array(self.y_i)[:, numpy.newaxis]
@@ -136,7 +136,7 @@ class TestMultiregression(unittest.TestCase):
         self.assertAlmostEqual(mr.variance[0][1, 1], 3.1539, 4)
 
     def test_2d_all_at_once(self):
-        mr = Multiregression((2, 2), 2)
+        mr = MultiLstSq((2, 2), 2)
 
         A = numpy.hstack((numpy.ones((len(self.x_i), 1)), numpy.array(self.x_i)[:, numpy.newaxis]))
         b = numpy.array(self.y_i)[:, numpy.newaxis]
@@ -181,7 +181,7 @@ class TestMultiregression(unittest.TestCase):
         self.assertAlmostEqual(mr.variance[0, 0][1, 1], 3.1539, 4)
 
     def test_2d_one_by_one(self):
-        mr = Multiregression((2, 2), 2)
+        mr = MultiLstSq((2, 2), 2)
 
         for i in range(2):
             for x, y in zip(self.x_i, self.y_i):
@@ -224,7 +224,7 @@ class TestMultiregression(unittest.TestCase):
         self.assertAlmostEqual(mr.variance[0, 0][1, 1], 3.1539, 4)
 
     def test_variance(self):
-        mr1 = Multiregression((), 2)
+        mr1 = MultiLstSq((), 2)
 
         for i in range(2):
             for x, y in zip([1, 2, 3], [2.1, 3.9, 6]):
@@ -234,7 +234,7 @@ class TestMultiregression(unittest.TestCase):
 
             mr1.switch_to_variance()
 
-        mr2 = Multiregression((), 2)
+        mr2 = MultiLstSq((), 2)
 
         for i in range(2):
             mr2.add_data(numpy.array([[0, 0]]), numpy.array([[0]]))
@@ -271,8 +271,8 @@ class TestMultiregression(unittest.TestCase):
         x = numpy.array([[1, 3.2]])
         numpy.testing.assert_almost_equal(mrss1.evaluate_at(x), mrss2.evaluate_at(x))
 
-    def test_model_multiregression_simple(self):
-        mmr = ModelMultiregression((), 'b0+b1*x0')
+    def test_model_multilstsq_simple(self):
+        mmr = ModelMultiLstSq((), 'b0+b1*x0')
 
         for i in range(2):
             for x, y in zip(self.x_i, self.y_i):
@@ -289,8 +289,8 @@ class TestMultiregression(unittest.TestCase):
         self.assertAlmostEqual(mmr.variance[0, 0], 8.63185, 5)
         self.assertAlmostEqual(mmr.variance[1, 1], 3.1539, 4)
 
-    def test_model_multiregression_simple_at_once(self):
-        mmr = ModelMultiregression((), 'b0+b1*x0')
+    def test_model_multilstsq_simple_at_once(self):
+        mmr = ModelMultiLstSq((), 'b0+b1*x0')
 
         A = numpy.array(self.x_i)[:, numpy.newaxis]
         b = numpy.array(self.y_i)[:, numpy.newaxis]
@@ -306,11 +306,11 @@ class TestMultiregression(unittest.TestCase):
         self.assertAlmostEqual(mmr.variance[0, 0], 8.63185, 5)
         self.assertAlmostEqual(mmr.variance[1, 1], 3.1539, 4)
 
-    def test_model_multiregression_validation(self):
+    def test_model_multilstsq_validation(self):
         with self.assertRaises(ValueError):
-            mmr = ModelMultiregression((), '1')
+            mmr = ModelMultiLstSq((), '1')
 
-        mmr = ModelMultiregression((), 'b0+b1*x0')
+        mmr = ModelMultiLstSq((), 'b0+b1*x0')
         self.assertEqual('b0+b1*x0', mmr.base_model_str)
         self.assertEqual(set(mmr.beta_names), {'b0', 'b1'})
 
@@ -321,8 +321,8 @@ class TestMultiregression(unittest.TestCase):
         with self.assertRaises(ValueError):
             mmr.add_data(numpy.array([[1, 1]]), numpy.array([[1]]), numpy.array([]))
 
-    def test_model_multiregression_simple_masked_at_once(self):
-        mmr = ModelMultiregression((), 'b0+b1*x0')
+    def test_model_multilstsq_simple_masked_at_once(self):
+        mmr = ModelMultiLstSq((), 'b0+b1*x0')
 
         Ao = numpy.array(self.x_i)[:, numpy.newaxis]
         bo = numpy.array(self.y_i)[:, numpy.newaxis]
@@ -348,8 +348,8 @@ class TestMultiregression(unittest.TestCase):
         self.assertAlmostEqual(mmr.variance[0, 0], 8.63185, 5)
         self.assertAlmostEqual(mmr.variance[1, 1], 3.1539, 4)
 
-    def test_model_multiregression_simple_at_once_1d(self):
-        mmr = ModelMultiregression((3, ), 'b0+b1*x0')
+    def test_model_multilstsq_simple_at_once_1d(self):
+        mmr = ModelMultiLstSq((3, ), 'b0+b1*x0')
 
         A = numpy.array(self.x_i)[:, numpy.newaxis]
         b = numpy.array(self.y_i)[:, numpy.newaxis]
@@ -379,8 +379,8 @@ class TestMultiregression(unittest.TestCase):
 
         numpy.testing.assert_almost_equal(mmr.apply_expr.substitute(None, {'X': numpy.array([[[1]], [[1]], [[1]]])}).eval(), numpy.array([22.21023062, 22.21023062, 22.21023062]))
 
-    def test_model_multiregression_complex(self):
-        pmr = ModelMultiregression((), 'b0+b1*x0+b2*x1')
+    def test_model_multilstsq_complex(self):
+        pmr = ModelMultiLstSq((), 'b0+b1*x0+b2*x1')
 
         A = numpy.array([
             [3, 4],
@@ -408,7 +408,7 @@ class TestMultiregression(unittest.TestCase):
             Xmr = numpy.array([numpy.zeros_like(X), X])
             ymr = numpy.array([numpy.zeros_like(y), y])
 
-            mr = Multiregression((2, ), dim)
+            mr = MultiLstSq((2, ), dim)
             mr.add_data(Xmr, ymr)
             mr.switch_to_variance()
             mr.add_data(Xmr, ymr)

@@ -6,7 +6,7 @@ from .expreval import ExprEvaluator, RegrExprEvaluator
 
 MODE_READONLY, MODE_REGRESSION, MODE_VARIANCE = range(3)
 
-class Multiregression:
+class MultiLstSq:
     def __init__(self, problem_dimensions, n_parameters, internal_dtype = numpy.float):
         """Problem dimensions is the size of the problem, it can be () (0-dimentional), or for example (800,600) for 800x600 times the regression problem"""
         self._problem_dimensions = problem_dimensions
@@ -233,12 +233,12 @@ class Multiregression:
         return self.rss / (self.n_observations - self.n_parameters)
 
 
-class ModelMultiregression(Multiregression):
+class ModelMultiLstSq(MultiLstSq):
     def __init__(self, problem_dimensions, model_str, internal_dtype = numpy.float):
         self._build_expressions(problem_dimensions, model_str)
         if len(self._base_model.parameter_variables) == 0:
             raise ValueError("Model should have at least 1 parameter")
-        Multiregression.__init__(self, problem_dimensions, len(self._base_model.parameter_variables), internal_dtype)
+        MultiLstSq.__init__(self, problem_dimensions, len(self._base_model.parameter_variables), internal_dtype)
 
     def _build_expressions(self, problem_dimensions, model_str):
         self._base_model_str = model_str

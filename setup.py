@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 import re
 import os
 
-version_data = open("multiregression/_version.py", "r").read()
+version_data = open("multilstsq/_version.py", "r").read()
 mo = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", version_data, re.M)
 
 if mo:
@@ -24,7 +24,7 @@ platform_requirements = []
 
 _setup_data = {
     # Base information
-    'name': 'multiregression',
+    'name': 'multilstsq',
     'version': version_string,
     'packages': find_packages(),
     'test_suite': 'setup.test_suite',
@@ -52,7 +52,7 @@ _setup_data = {
     'author_email': "l@libres.ch",
     'maintainer': "Laurent Fasnacht",
     'maintainer_email': "l@libres.ch",
-    'url': 'https://github.com/UniNE-CHYN/multiregression',
+    'url': 'https://github.com/UniNE-CHYN/multilstsq',
     'license': 'LGPLv3',
 
     # Requirements

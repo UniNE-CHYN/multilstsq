@@ -3,7 +3,7 @@
 Installation
 ============
 
-``multiregression`` can be installed either using ``pip``, or from source.
+``multilstsq`` can be installed either using ``pip``, or from source.
 
 Installing using ``pip``
 ------------------------
@@ -12,7 +12,7 @@ To install using ``pip``, simply run:
 
 .. code-block:: none
 
-    pip3 install multiregression
+    pip3 install multilstsq
 
 Manual installation from source
 -------------------------------
@@ -21,10 +21,10 @@ To install manually, run the following:
 
 .. code-block:: none
 
-    git clone https://github.com/UniNE-CHYN/multiregression
-    cd multiregression
+    git clone https://github.com/UniNE-CHYN/multilstsq
+    cd multilstsq
     sudo python3 setup.py install
-    
+
 If root access is not available, simply add ``--user`` to the last command line.
 
 To contribute, use ``develop`` instead of ``install``. This sets a link to the source folder in the python installation, instead of copying the files.
