@@ -1,6 +1,5 @@
 import ast
 import copy
-import re
 import inspect
 import types
 import itertools
@@ -322,57 +321,4 @@ class ExprEvaluator:
 
 
 
-
-class RegrExprEvaluator(ExprEvaluator):
-    """Affine expression in b0, b1... bn (bi = linear regression parameters)
-
-    Explanatory can be specified as x0, x1, ...xn.
-
-    (this is only convention, class should work with other naming)
-
-    General form should be: (coeff0)*b0 + (coeff1)*b1 + (coeff2)*b2 + b3
-
-    coefficient should be in parentheses, or can be omitted if == 1.
-    """
-
-    def find_coeff_for(self, variable):
-        ret = self._find_coeff_for(variable, self._parsed_expr)
-        if ret is None:
-            return ExprEvaluator(ast.copy_location(ast.Num(n=0), self._parsed_expr))
-        else:
-            return ret
-
-    def _find_coeff_for(self, variable, expr):
-        if isinstance(expr, ast.Name):
-            if expr.id == variable:
-                return ExprEvaluator(ast.copy_location(ast.Num(n=1), expr))
-        elif isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.Add):
-            #Add: we're still at the top-level poly
-            ret1 = self._find_coeff_for(variable, expr = expr.left)
-            ret2 = self._find_coeff_for(variable, expr = expr.right)
-            if ret1 is not None:
-                assert ret2 is None
-                return ret1
-            elif ret2 is not None:
-                assert ret1 is None
-                return ret2
-            else:
-                #Not found!
-                return None
-        elif isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.Mult):
-            if isinstance(expr.left, ast.Name) and expr.left.id == variable:
-                return ExprEvaluator(expr.right, self._constants)
-            elif isinstance(expr.right, ast.Name) and expr.right.id == variable:
-                return ExprEvaluator(expr.left, self._constants)
-        else:
-            #Unknown expr, ignore
-            return None
-
-    @property
-    def parameter_variables(self):
-        return ['b{0}'.format(b) for b in sorted(int(x[1:]) for x in self.variables if re.match('^b[0-9]+$', x))]
-
-    @property
-    def explanatory_variables(self):
-        return ['x{0}'.format(x) for x in sorted(int(x[1:]) for x in self.variables if re.match('^x[0-9]+$', x))]
 

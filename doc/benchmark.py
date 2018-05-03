@@ -14,7 +14,7 @@ if __name__ == '__main__':
 
     times_multilstsq = []
     for s in range(minsh, maxsh):
-        mmr = ModelMultiLstSq((s, ), d['model'])
+        mmr = MultiRegression((s, ), d['model'])
         t = time.time()
         mmr.add_data(d['explanatories'][:s, :n // s, :], d['response'][:s, :n // s, :])
         mmr.switch_to_variance()
