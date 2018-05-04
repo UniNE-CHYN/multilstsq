@@ -4,12 +4,14 @@ import inspect
 import types
 import itertools
 
-def ast_print(x): # pragma: no cover
+
+def ast_print(x):  # pragma: no cover
     """Print a Python abstract syntax tree. Tolerates None."""
     if x is None:
         print(None)
     else:
         print(ast.dump(x))
+
 
 def ast_compare(node1, node2):
     """
@@ -32,10 +34,13 @@ def ast_compare(node1, node2):
     else:
         return node1 == node2
 
+
 class _SubstituteTransformer(ast.NodeTransformer):
+
     """
     Transformer to replace a variable name by an expression.
     """
+
     def __init__(self, substitution_dict):
         """
         Initialize the tranformer.
@@ -49,7 +54,7 @@ class _SubstituteTransformer(ast.NodeTransformer):
         self._substitution_dict = {}
         for variable_name, substitute_by in substitution_dict.items():
             if type(substitute_by) == str:
-                self._substitution_dict[variable_name] = ast.parse(substitute_by, mode = 'eval').body
+                self._substitution_dict[variable_name] = ast.parse(substitute_by, mode='eval').body
             elif isinstance(substitute_by, ExprEvaluator):
                 self._substitution_dict[variable_name] = substitute_by._parsed_expr
             else:
@@ -69,7 +74,9 @@ class _SubstituteTransformer(ast.NodeTransformer):
                 return ast.copy_location(v, node)
         return super().visit(node)
 
+
 class _ReduceTransformer(ast.NodeTransformer):
+
     """
     Transformer to do one step of the reduction of an :class:`ast.AST` expression.
 
@@ -77,6 +84,7 @@ class _ReduceTransformer(ast.NodeTransformer):
     the result is ``__ExprEvaluator_0+y*__ExprEvaluator_1+__ExprEvaluator_2``, with constants
     ``{'__ExprEvaluator_0': 3, '__ExprEvaluator_1': 0.4, '__ExprEvaluator_2': 4}``.
     """
+
     def __init__(self, constants):
         """
         Initialize the tranformer.
@@ -100,33 +108,36 @@ class _ReduceTransformer(ast.NodeTransformer):
         self._did_something = newvalue
 
     def generic_visit(self, node):
-        #No change if the node is not an expression or if it's a Name
+        # No change if the node is not an expression or if it's a Name
         if not isinstance(node, ast.expr) or isinstance(node, ast.Name):
             return node
 
-        #Get the expression and try to evaluate it
-        expr = ast.copy_location(ast.Expression(body = node), node)
+        # Get the expression and try to evaluate it
+        expr = ast.copy_location(ast.Expression(body=node), node)
         try:
-            ret = eval(compile(expr, '<eval>', mode = 'eval'), globals(), self.constants)
+            ret = eval(compile(expr, '<eval>', mode='eval'), globals(), self.constants)
         except NameError as e:
-            #If we have an undefined name, get a step deeper in the tree
+            # If we have an undefined name, get a step deeper in the tree
             return super().generic_visit(node)
 
-        #find a free constant index
+        # find a free constant index
         i = 0
         while '__ExprEvaluator_{0}'.format(i) in self.constants:
             i += 1
 
         const_name = '__ExprEvaluator_{0}'.format(i)
 
-        #Do the substitution
+        # Do the substitution
         self.constants[const_name] = ret
 
         self._did_something = True
-        return ast.copy_location(ast.Name(id = const_name, ctx = ast.Load()), node)
+        return ast.copy_location(ast.Name(id=const_name, ctx=ast.Load()), node)
+
 
 class _ListNames(ast.NodeVisitor):
+
     """Visitor to get all names of an :class:`ast.expr`"""
+
     def __init__(self):
         self._names = set()
 
@@ -140,11 +151,10 @@ class _ListNames(ast.NodeVisitor):
         return super().generic_visit(node)
 
 
-
 class ExprEvaluator:
     #__ExprEvaluator_i where is is an int are reserved names in expr
 
-    def __init__(self, expr, constants = None, enable_caller_modules=True):
+    def __init__(self, expr, constants=None, enable_caller_modules=True):
         """Initialize an ExprEvaluator object
 
         :param expr: Expression string, should be a valid Python 3 expression
@@ -169,26 +179,27 @@ class ExprEvaluator:
         self._constants = constants.copy()
         if type(expr) == str:
             self._expr = expr
-            self._parsed_expr = ast.parse(expr, mode = 'eval').body
+            self._parsed_expr = ast.parse(expr, mode='eval').body
         elif isinstance(expr, ast.expr):
             self._expr = '<ast.Expr>'
             self._parsed_expr = expr
         elif type(expr) in (int, float):
             self._expr = str(expr)
-            self._parsed_expr = ast.parse(str(expr), mode = 'eval').body
+            self._parsed_expr = ast.parse(str(expr), mode='eval').body
         else:
             raise TypeError("Type {0} is not handled for expr".format(type(expr)))
 
-        #Remove unneeded constants
+        # Remove unneeded constants
         for k in set(self._constants.keys()).difference(self.constants):
             del self._constants[k]
 
         self._call_args = None
 
-    def substitute(self, expressions = None, constants = None):
+    def substitute(self, expressions=None, constants=None):
         """Substitute expressions or constants in the current expression.
 
-        :param expressions: dictionary of expression to substitute. The keys can be of :py:class:`str`, :py:class:`ast.AST` or :class:`multilstsq.ExprEvaluator`.
+        :param expressions: dictionary of expression to substitute. The keys can be of :py:class:`str`, :py:class:`ast.AST` or
+            :class:`multilstsq.ExprEvaluator`.
         :param constants: dictionary of constants to substitute ``{'constantname': value}``
         :returns: New :class:`multilstsq.ExprEvaluator` object with the substitution done.
         """
@@ -225,7 +236,6 @@ class ExprEvaluator:
         ln.visit(self._parsed_expr)
         return ln.names.difference(self._constants.keys())
 
-
     def reduce(self):
         """
         :returns: A copy of the current expression, where all known part of the syntax tree are simplified.
@@ -256,7 +266,7 @@ class ExprEvaluator:
         if isinstance(reduced_expr._parsed_expr, ast.Name) and reduced_expr._parsed_expr.id in reduced_expr._constants:
             return reduced_expr._constants[reduced_expr._parsed_expr.id]
         else:
-            #Not fully reductible, so cannot be evaluated
+            # Not fully reductible, so cannot be evaluated
             remaining_variables = reduced_expr.variables
             raise ValueError("Cannot fully reduce expression, remaining variables: {0}".format(', '.join(remaining_variables)))
 
@@ -264,7 +274,8 @@ class ExprEvaluator:
         return 'ExprEvaluator({0}, {1!r})'.format(ast.dump(self._parsed_expr), self._constants)
 
     def enable_call(self, variable_list):
-        """Enables calling the expression, as a simplification for calling :meth:`multilstsq.ExprEvaluator.substitute` followed by :meth:`multilstsq.ExprEvaluator.eval`.
+        """Enables calling the expression, as a simplification for calling :meth:`multilstsq.ExprEvaluator.substitute` followed by
+        :meth:`multilstsq.ExprEvaluator.eval`.
 
         :param variable_list: List of variables names which correspond to the arguments which will be used in :meth:`multilstsq.ExprEvaluator.__call__`"""
         self._call_args = variable_list
@@ -378,9 +389,4 @@ class ExprEvaluator:
             else:
                 return '{}:{}:{}'.format(slice_lower, slice_upper, self._to_string(node.step))
 
-        raise ValueError('malformed node or string: ' + ast.dump(node)) # pragma: no cover
-
-
-
-
-
+        raise ValueError('malformed node or string: ' + ast.dump(node))  # pragma: no cover
