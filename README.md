@@ -83,5 +83,5 @@ The following tools are used to ensure good code quality:
 Tool         | Status
 ------------ | -------------
 travis-ci | [![Build Status](https://travis-ci.org/UniNE-CHYN/multilstsq.svg?branch=master)](https://travis-ci.org/UniNE-CHYN/multilstsq)
-AppVeyor | [![Build status](https://ci.appveyor.com/api/projects/status/xxxxx?svg=true)](https://ci.appveyor.com/project/lfasnacht/multilstsq)
+AppVeyor | [![Build status](https://ci.appveyor.com/api/projects/status/38upk18lcu4mogot?svg=true)](https://ci.appveyor.com/project/lfasnacht/multilstsq)
 Coveralls | [![Coverage Status](https://coveralls.io/repos/github/UniNE-CHYN/multilstsq/badge.svg?branch=master)](https://coveralls.io/github/UniNE-CHYN/multilstsq?branch=master)
