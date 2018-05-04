@@ -417,7 +417,7 @@ class TestMultiLstSq(unittest.TestCase):
             beta_cov = mr.variance
 
             #FIXME: is there a way to compute the covariance with numpy directly?
-            numpy.testing.assert_almost_equal(beta_hat, numpy.linalg.lstsq(X, y, rcond=None)[0])
+            numpy.testing.assert_almost_equal(beta_hat, numpy.linalg.lstsq(X, y, rcond=-1)[0])
 
 
 if __name__ == '__main__':
