@@ -167,6 +167,8 @@ class TestExprEvaluator(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.assertEqual(ee(1, 2, 3), 7)
 
+        self.assertEqual(ee(a=1, b=2, c=3), 7)
+
         ee.enable_call(['a', 'b', 'c'])
         self.assertEqual(ee(1, 2, 3), 7)
 

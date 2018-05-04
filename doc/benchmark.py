@@ -2,7 +2,7 @@ import sys
 
 if __name__ == '__main__':
     from mmappickle import mmapdict
-    from multilstsq import ModelMultiLstSq
+    from multilstsq import MultiRegression
     import numpy
     import time
 
@@ -56,7 +56,7 @@ if __name__ == '__main__':
     plt.xlabel('Number of simultaneous regression')
     plt.ylabel('Time [s] (lower is better)')
     plt.title('Regression time in function of number of simultaneous regression, fixed data size')
-    plt.legend(['lstsq', 'multilstsq'])
+    plt.legend(['lstsq', 'multiregression'])
     plt.tight_layout()
     plt.savefig('benchmark.svg')
     plt.savefig('benchmark.png')

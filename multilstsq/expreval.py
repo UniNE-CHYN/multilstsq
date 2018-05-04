@@ -145,6 +145,14 @@ class ExprEvaluator:
     #__ExprEvaluator_i where is is an int are reserved names in expr
 
     def __init__(self, expr, constants = None, enable_caller_modules=True):
+        """Initialize an ExprEvaluator object
+
+        :param expr: Expression string, should be a valid Python 3 expression
+        :param constant: Dictionary of constants ``{'constantname': value}``.
+        :param enable_caller_modules: Boolean, if ``True`` modules of the first frame in the stack outside of multilstsq
+            will be included in the context of the expression
+        """
+
         if constants is None:
             constants = {}
 
@@ -177,9 +185,15 @@ class ExprEvaluator:
 
         self._call_args = None
 
-    def substitute(self, substitution_dict = None, constants = None):
-        if substitution_dict is not None:
-            new_expr = _SubstituteTransformer(substitution_dict).visit(copy.deepcopy(self._parsed_expr))
+    def substitute(self, expressions = None, constants = None):
+        """Substitute expressions or constants in the current expression.
+
+        :param expressions: dictionary of expression to substitute. The keys can be of :py:class:`str`, :py:class:`ast.AST` or :class:`multilstsq.ExprEvaluator`.
+        :param constants: dictionary of constants to substitute ``{'constantname': value}``
+        :returns: New :class:`multilstsq.ExprEvaluator` object with the substitution done.
+        """
+        if expressions is not None:
+            new_expr = _SubstituteTransformer(expressions).visit(copy.deepcopy(self._parsed_expr))
         else:
             new_expr = self._parsed_expr
 
@@ -194,18 +208,31 @@ class ExprEvaluator:
 
     @property
     def constants(self):
+        """
+        :returns: Set of constants names (values which have a defined substitution) in the current expression
+        """
         ln = _ListNames()
         ln.visit(self._parsed_expr)
         return ln.names.intersection(self._constants.keys())
 
     @property
     def variables(self):
+        """
+        :returns: Set of variables names (values which don't have a defined substitution) in the current expression
+        """
+
         ln = _ListNames()
         ln.visit(self._parsed_expr)
         return ln.names.difference(self._constants.keys())
 
 
     def reduce(self):
+        """
+        :returns: A copy of the current expression, where all known part of the syntax tree are simplified.
+
+        For example, reducing ``a*(b+c)`` with known ``b`` and ``c``, will result in ``a*__ExprEvaluator_0``,
+        where ``__ExprEvaluator_0`` is defined as a constant.
+        """
         constants_and_modules = self._caller_modules.copy()
         constants_and_modules.update(self._constants)
         rt = _ReduceTransformer(constants_and_modules)
@@ -221,6 +248,10 @@ class ExprEvaluator:
         return ExprEvaluator(new_expr, new_constants)
 
     def eval(self):
+        """
+        :returns: The python object which results of the expression
+        :raises ValueError: if at least one variable is not defined
+        """
         reduced_expr = self.reduce()
         if isinstance(reduced_expr._parsed_expr, ast.Name) and reduced_expr._parsed_expr.id in reduced_expr._constants:
             return reduced_expr._constants[reduced_expr._parsed_expr.id]
@@ -233,17 +264,38 @@ class ExprEvaluator:
         return 'ExprEvaluator({0}, {1!r})'.format(ast.dump(self._parsed_expr), self._constants)
 
     def enable_call(self, variable_list):
+        """Enables calling the expression, as a simplification for calling :meth:`multilstsq.ExprEvaluator.substitute` followed by :meth:`multilstsq.ExprEvaluator.eval`.
+
+        :param variable_list: List of variables names which correspond to the arguments which will be used in :meth:`multilstsq.ExprEvaluator.__call__`"""
         self._call_args = variable_list
 
-    def __call__(self, *args):
-        if self._call_args is None:
-            raise RuntimeError("enable_call should be called first!")
-        return self.substitute(None, dict(zip(self._call_args, args))).eval()
+    def __call__(self, *args, **kwargs):
+        """Substitute the arguments in the expression, and then evaluate it and return the resulting Python object.
+
+        The positional arguments are :py:func:`zip`'ed with the ``variable_list`` of :meth:`multilstsq.ExprEvaluator.enable_call`, which the named arguments
+        are directly substituted.
+
+        :returns: The Python object of the evaluated expression.
+        :raises RuntimeError: if positional arguments are used, but :meth:`multilstsq.ExprEvaluator.enable_call` was not called.
+        :raises ValueError: if there are undefined variables.
+        """
+        if len(args) > 0:
+            if self._call_args is None:
+                raise RuntimeError("enable_call should be called first, when using positional arguments!")
+            arguments = dict(zip(self._call_args, args))
+        else:
+            arguments = {}
+
+        arguments.update(kwargs)
+
+        return self.substitute(None, arguments).eval()
 
     def __str__(self):
+        """:returns: a string corresponding to the expression"""
         return self._to_string(self._parsed_expr)
 
     def _to_string(self, node):
+        """:returns: a string corresponding to the :py:class:`ast.AST` object"""
         if isinstance(node, (ast.Str, ast.Bytes)):
             return repr(node.s)
         elif isinstance(node, ast.Num):

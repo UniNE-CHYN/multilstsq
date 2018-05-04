@@ -3,7 +3,7 @@ MultiLstSq
 
 Least squares fitting is a underlying method for numerous applications, the most common one being linear regression. It consists in finding the parameters vector ``β°`` which minimizes ``‖ε‖₂`` in the equation ``y = Xβ + ε``, where `X` is the design matrix, `y` the observation vector, and `ε` the error vector.
 
-Since it is a fundamental algorithm, a number of Python 3 implementation exists, with different features set and performance, such as:  `numpy.linalg.lstsq`, `scipy.stats.linregress`, `sklearn.linear_model.LinearRegression` and `statsmodel.OLS`.
+Since it is a fundamental algorithm, a number of Python 3 implementation exists, with different feature sets and performance, such as:  `numpy.linalg.lstsq`, `scipy.stats.linregress`, `sklearn.linear_model.LinearRegression` and `statsmodel.OLS`.
 
 However, the current available libraries are not designed to work on a large quantity of simultaneous problems, for example solving a least square problem for each pixel of an image. Iterating over a large number of small problems is inefficient. Moreover, when doing linear regression, it is often tedious to build the design matrix `X`.
 
@@ -11,12 +11,12 @@ The goal of `multilstsq` is to work on arrays of problems, with good performance
 
 To reach these goals, `multilstsq` uses the following techniques:
 
-- As ``β°=(XᵀX)⁻¹Xᵀy``, it is possible to compute ``XᵀX`` and ``Xᵀy`` incrementally, by providing data in chunks.
+- It is possible to compute ``β°=(XᵀX)⁻¹Xᵀy`` incrementally, due to the linearity of ``XᵀX`` and ``Xᵀy``, by providing data in chunks.
 - Inverting ``XᵀX`` is done by explicit formulas when the dimension is small. This has the advantage of being vector operations which can be applied simultaneously on all problems.
 - Masked data are handled as lines of zeros in the design matrix and the observation, which in fact have no effect. This allows adding different amount of data in different subproblems.
 - For regression, an expression evaluator is implemented, which converts the input model from the user (for example `b0+b1*x0`) into the complex expression needed to build the design matrix from the vector `X` provided by the user. In that example, it is: `np.concatenate([np.ones(o_dim)[(..., np.newaxis)], ((X)[..., :, 0])[(..., np.newaxis)]])`. This expression evaluator also may be useful for other purposes in other libraries.
 
-As shown in the following figure, this ensures the algorithm has good performance compared to a loop every problem:
+As shown in the following figure, this ensures the algorithm has good performance compared to a loop:
 
 ![Parallel performance of multilstsq, constant data size.](https://raw.githubusercontent.com/UniNE-CHYN/multilstsq/master/doc/benchmark.png).
 

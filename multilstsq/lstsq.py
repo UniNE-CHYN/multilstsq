@@ -5,8 +5,28 @@ import warnings
 MODE_READONLY, MODE_REGRESSION, MODE_VARIANCE = range(3)
 
 class MultiLstSq:
+    """
+    Multiple least squares problems.
+
+    y = Xβ + ε
+
+    This is a class which can exist in three modes:
+
+    - ``MODE_REGRESSION``: add data to the least square matrices to obtain the mean
+    - ``MODE_VARIANCE``: compute the variance
+    - ``MODE_READONLY``: the object is frozen.
+
+    The mode can only be switched "forward" (it is not possible to move from ``MODE_VARIANCE`` to ``MODE_REGRESSION`` for example.)
+
+    """
     def __init__(self, problem_dimensions, n_parameters, internal_dtype = numpy.float):
-        """Problem dimensions is the size of the problem, it can be () (0-dimentional), or for example (800,600) for 800x600 times the regression problem"""
+        """
+        Create a MultiLstSq object, which is originally in ``MODE_REGRESSION``.
+
+        :param problem_dimensions: Tuple, size of the problem array, it can be ``()`` (0-dimensional), for a single least square problem, or for example ``(800, 600)`` for 800x600 times the regression problem
+        :param n_parameters: Number of parameters of the least squares problem.
+        :param internal_dtype: :class:`numpy.dtype` data type of the matrices"""
+
         self._problem_dimensions = problem_dimensions
         self._n_parameters = n_parameters
         self._internal_dtype = internal_dtype
@@ -29,14 +49,17 @@ class MultiLstSq:
         self._cache_variance = None
 
     def switch_to_variance(self):
+        """Switch to variance computation mode."""
         if self._mode not in (MODE_REGRESSION, MODE_VARIANCE):
             raise RuntimeError("Only allowed to switch to variance in regression mode.")
         self._mode = MODE_VARIANCE
 
     def switch_to_read_only(self):
+        """Switch to read-only mode."""
         self._mode = MODE_READONLY
 
     def __validate_dimensions(self, X=None, y=None, w=None):
+        """Validate the dimensions of the matrices"""
         assert w is None or y is not None, "Should provide y if providing w"
         assert y is None or X is not None, "Should provide X if providing y"
 
@@ -67,6 +90,7 @@ class MultiLstSq:
         return numpy.einsum('...kj,...jl', X, self.beta)
 
     def add_data(self, X, y, w = None):
+        """Add data to the object (depending on the mode, for either mean or variance computation)"""
         self.__validate_dimensions(X, y, w)
 
         if w is not None:
