@@ -68,7 +68,7 @@ class MultiRegression(MultiLstSq):
 
     def _build_expressions(self, problem_dimensions, model_str):
         self._base_model_str = model_str
-        self._base_model = RegrExprEvaluator(model_str)
+        self._base_model = RegrExprEvaluator(model_str, constants={'numpy': numpy,})
         if len(self._base_model.explanatory_variables) == 0:
             self._n_explanatory_min = 0
         else:
@@ -76,11 +76,13 @@ class MultiRegression(MultiLstSq):
 
         if len(self._base_model.parameter_variables) > 0:
             self._conversion_expression = ExprEvaluator(
-                'numpy.concatenate([{0}], axis={1})'.format(','.join('(numpy.ones(o_dim)*({0}))[...,numpy.newaxis]'.format(var) for var in self._base_model.parameter_variables), len(problem_dimensions) + 1)
+                'numpy.concatenate([{0}], axis={1})'.format(','.join('(numpy.ones(o_dim)*({0}))[...,numpy.newaxis]'.format(var) for var in self._base_model.parameter_variables), len(problem_dimensions) + 1),
+                constants={'numpy': numpy,}
             )
         else:
             self._conversion_expression = ExprEvaluator(
-                'numpy.empty({0}+(X.shape[-2],0))'.format(problem_dimensions)
+                'numpy.empty({0}+(X.shape[-2],0))'.format(problem_dimensions),
+                constants={'numpy': numpy,}
             )
         self._conversion_expression = self._conversion_expression.substitute(
             dict((var, self._base_model.find_coeff_for(var)) for var in self._base_model.parameter_variables)
@@ -95,7 +97,7 @@ class MultiRegression(MultiLstSq):
             dict((var, 'X[..., :, {0}]'.format(var[1:])) for var in self._base_model.explanatory_variables),
         )
 
-        self._apply_expression = ExprEvaluator('x[...,0]').substitute({'x': self._apply_expression,})
+        self._apply_expression = ExprEvaluator('x[...,0]', constants={'numpy': numpy,}).substitute({'x': self._apply_expression,})
 
     @property
     def base_model_str(self):

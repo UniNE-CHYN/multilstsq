@@ -12,8 +12,9 @@ Contents:
    :maxdepth: 2
 
    install
-   quickstart
-   expreval
+   api
+   internals
+   contributing
 
 Indices and tables
 ==================

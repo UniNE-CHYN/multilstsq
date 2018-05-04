@@ -5,12 +5,17 @@ import types
 import itertools
 
 def ast_print(x): # pragma: no cover
+    """Print a Python abstract syntax tree. Tolerates None."""
     if x is None:
         print(None)
     else:
         print(ast.dump(x))
 
 def ast_compare(node1, node2):
+    """
+    Compare two AST nodes.
+    :returns: True if equal, False otherwise.
+    """
     if type(node1) is not type(node2):
         return False
     if isinstance(node1, ast.AST):
@@ -58,6 +63,7 @@ class _SubstituteTransformer(ast.NodeTransformer):
             return node
 
     def visit(self, node):
+        """Visitor for any node types. Needed to substitute complex expressions."""
         for k, v in self._substitution_dict.items():
             if ast_compare(node, k):
                 return ast.copy_location(v, node)
@@ -82,11 +88,14 @@ class _ReduceTransformer(ast.NodeTransformer):
 
     @property
     def did_something(self):
-        """Return True if the expression has been changed."""
+        """
+        :returns: True if the expression has been changed.
+        """
         return self._did_something
 
     @did_something.setter
     def did_something(self, newvalue):
+
         assert newvalue in (True, False)
         self._did_something = newvalue
 
@@ -123,6 +132,7 @@ class _ListNames(ast.NodeVisitor):
 
     @property
     def names(self):
+        """:returns: the set of names"""
         return self._names
 
     def visit_Name(self, node):

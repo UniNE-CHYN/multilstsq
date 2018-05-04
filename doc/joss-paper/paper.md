@@ -18,19 +18,24 @@ bibliography: paper.bib
 
 # Summary
 
-MultiLstSq is a Python 3 library to do multiple linear regressions simultaneously, in an incremental way, without having to build explicitely the design matrix.
+Least squares fitting is a underlying method for numerous applications, the most common one being linear regression. It consists in finding the parameters vector ``β°`` which minimizes ``‖ε‖₂`` in the equation ``y = Xβ + ε``, where `X` is the design matrix, `y` the observation vector, and `ε` the error vector.
 
-More explicitely, for a given problem ``Y = Xβ + ε``, the goal is to find the parameter vector ``β°`` which minimizes ``‖ε‖₂``. It can be shown that ``β°=(XᵀX)⁻¹XᵀY`` [ref].
+Since it is a fundamental algorithm, a number of Python 3 implementation exists, with different features set and performance, such as:  `numpy.linalg.lstsq`, `scipy.stats.linregress`, `sklearn.linear_model.LinearRegression` and `statsmodel.OLS`.
 
-For example, if the relation is ``y = β₀ + β₁x₀ + β₂x₀² + β₃x₁``, each row of ``X`` consists in the values ``1 x₀ x₀² x₁``, and each row corresponds to an observation, while ``Y`` is the vector of all responses ``y``. Manually constructing the design matrix ``X`` is error prone, especially during testing with multiple different models, therefore MultiLstSq automates it.
+However, the current available libraries are not designed to work on a large quantity of simultaneous problems, for example solving a least square problem for each pixel of an image. Iterating over a large number of small problems is inefficient. Moreover, when doing linear regression, it is often tedious to build the design matrix `X`.
 
-Depending on the number of parameter and the number of observation, ``X`` and ``Y`` can be quite large, making it impractical to directly compute ``β°`` (due to large memory requirements). However, linearity allows us to compute incrementally ``XᵀX`` and ``XᵀY``.
+The goal of `multilstsq` is to work on arrays of problems, with good performance, low memory requirements, reliability and flexibility. It also provides a way to automate the construction of the relevant structures (mostly the design matrix), using a model given as a string. It however does not strive to be a complete statistical library such as what would be provided by `statsmodel` or the language `R`.
 
-It is quite common to have multiple problems of the same structure (but different ``βᵢ`` values). The classical approach is to do a loop to solve each one individually, but it has performance issues.
+To reach these goals, `multilstsq` uses the following techniques:
 
-This library ensures that the performance doesn't depend on the number of simultaneous regression, but only on the quantity of data, as shown in the following figure:
+- As ``β°=(XᵀX)⁻¹Xᵀy``, it is possible to compute ``XᵀX`` and ``Xᵀy`` incrementally, by providing data in chunks.
+- Inverting ``XᵀX`` is done by explicit formulas when the dimension is small. This has the advantage of being vector operations which can be applied simultaneously on all problems.
+- Masked data are handled as lines of zeros in the design matrix and the observation, which in fact have no effect. This allows adding different amount of data in different subproblems.
+- For regression, an expression evaluator is implemented, which converts the input model from the user (for example `b0+b1*x0`) into the complex expression needed to build the design matrix from the vector `X` provided by the user. In that example, it is: `np.concatenate([np.ones(o_dim)[(..., np.newaxis)], ((X)[..., :, 0])[(..., np.newaxis)]])`. This expression evaluator also may be useful for other purposes in other libraries.
 
-![Parallel performance of MultiLstSq, constant data size.](https://raw.githubusercontent.com/UniNE-CHYN/mmappickle/master/doc/benchmark.png).
+As shown in the following figure, this ensures the algorithm has good performance compared to a loop every problem:
+
+![Parallel performance of multilstsq, constant data size.](https://raw.githubusercontent.com/UniNE-CHYN/multilstsq/master/doc/benchmark.png).
 
 # Applications
 
