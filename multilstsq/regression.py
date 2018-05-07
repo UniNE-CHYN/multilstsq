@@ -5,6 +5,7 @@ import ast
 from .expreval import ExprEvaluator
 from .lstsq import MultiLstSq
 
+
 class RegrExprEvaluator(ExprEvaluator):
     """Affine expression in b0, b1... bn (bi = linear regression parameters)
 
@@ -30,8 +31,8 @@ class RegrExprEvaluator(ExprEvaluator):
                 return ExprEvaluator(ast.copy_location(ast.Num(n=1), expr))
         elif isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.Add):
             # Add: we're still at the top-level poly
-            ret1 = self._find_coeff_for(variable, expr = expr.left)
-            ret2 = self._find_coeff_for(variable, expr = expr.right)
+            ret1 = self._find_coeff_for(variable, expr=expr.left)
+            ret2 = self._find_coeff_for(variable, expr=expr.right)
             if ret1 is not None:
                 assert ret2 is None
                 return ret1
@@ -60,7 +61,7 @@ class RegrExprEvaluator(ExprEvaluator):
 
 
 class MultiRegression(MultiLstSq):
-    def __init__(self, problem_dimensions, model_str, internal_dtype = numpy.float):
+    def __init__(self, problem_dimensions, model_str, internal_dtype=numpy.float):
         self._build_expressions(problem_dimensions, model_str)
         if len(self._base_model.parameter_variables) == 0:
             raise ValueError("Model should have at least 1 parameter")
@@ -76,7 +77,8 @@ class MultiRegression(MultiLstSq):
 
         if len(self._base_model.parameter_variables) > 0:
             self._conversion_expression = ExprEvaluator(
-                'numpy.concatenate([{0}], axis={1})'.format(','.join('(numpy.ones(o_dim)*({0}))[...,numpy.newaxis]'.format(var) for var in self._base_model.parameter_variables), len(problem_dimensions) + 1),
+                'numpy.concatenate([{0}], axis={1})'.format(','.join('(numpy.ones(o_dim)*({0}))[...,numpy.newaxis]'.format(var)
+                                                                     for var in self._base_model.parameter_variables), len(problem_dimensions) + 1),
                 constants={'numpy': numpy, }
             )
         else:
@@ -128,8 +130,7 @@ class MultiRegression(MultiLstSq):
             dim_str = ', '.join([str(d) for d in y.shape])
             raise ValueError('Wrong dimensions for w ({} instead of {})'.format(w_dim_str, dim_str))
 
-
-    def add_data(self, X, y, w = None):
+    def add_data(self, X, y, w=None):
         self.__validate_dimensions(X, y, w)
 
         X_new = self._conversion_expression.substitute(None, {'o_dim': X.shape[:-1], 'X': X, }).eval()
@@ -137,11 +138,11 @@ class MultiRegression(MultiLstSq):
         X_mask = None
         y_mask = None
         if isinstance(X, numpy.ma.MaskedArray) and X.mask.shape == X.shape:
-            X_mask = numpy.any(X.mask, axis = len(self._problem_dimensions) + 1)
+            X_mask = numpy.any(X.mask, axis=len(self._problem_dimensions) + 1)
             X_new = X_new.data.copy()
             X_new[X_mask] = 0
         if isinstance(y, numpy.ma.MaskedArray) and y.mask.shape == y.shape:
-            y_mask = numpy.any(y.mask, axis = len(self._problem_dimensions) + 1)
+            y_mask = numpy.any(y.mask, axis=len(self._problem_dimensions) + 1)
             y = y.data.copy()
             y[y_mask] = 0
 
@@ -154,8 +155,8 @@ class MultiRegression(MultiLstSq):
             elif y_mask is not None:
                 valid = ~y_mask
 
-            X_valid = numpy.repeat(valid[...,:, numpy.newaxis], X_new.shape[-1], len(self._problem_dimensions) + 1)
-            validb = valid[...,:, numpy.newaxis]
+            X_valid = numpy.repeat(valid[..., :, numpy.newaxis], X_new.shape[-1], len(self._problem_dimensions) + 1)
+            validb = valid[..., :, numpy.newaxis]
 
             return super().add_data(X_new * X_valid, y * validb, w)
         else:
@@ -164,15 +165,14 @@ class MultiRegression(MultiLstSq):
     def get_expr_for_idx(self, pb_idx):
         assert type(pb_idx) == tuple
         expr = self._base_model.substitute(None,
-            dict((var, self.beta[pb_idx+(varidx, 0)]) for varidx, var in enumerate(self._base_model.parameter_variables))
-        ).reduce()
+                                           dict((var, self.beta[pb_idx+(varidx, 0)]) for varidx, var in enumerate(self._base_model.parameter_variables))
+                                           ).reduce()
         expr.enable_call(['x{0}'.format(x) for x in range(self._n_explanatory_min + 1)])
         return expr
 
-
     @property
     def apply_expr(self):
-        return self._apply_expression.substitute(None, {'beta':self.beta})
+        return self._apply_expression.substitute(None, {'beta': self.beta})
 
     def __getstate__(self):
         d = super().__getstate__()
@@ -182,4 +182,3 @@ class MultiRegression(MultiLstSq):
     def __setstate__(self, newstate):
         self._build_expressions(newstate['problem_dimensions'], newstate['base_model_str'])
         return super().__setstate__(newstate)
-

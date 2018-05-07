@@ -152,7 +152,7 @@ class _ListNames(ast.NodeVisitor):
 
 
 class ExprEvaluator:
-    #__ExprEvaluator_i where is is an int are reserved names in expr
+    # __ExprEvaluator_i where is is an int are reserved names in expr
 
     def __init__(self, expr, constants=None, enable_caller_modules=True):
         """Initialize an ExprEvaluator object
