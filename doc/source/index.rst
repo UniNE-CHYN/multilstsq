@@ -75,6 +75,8 @@ Documentation contents
    :maxdepth: 2
 
    install
+   tutorial
+   expreval
    api
    contributing
 
