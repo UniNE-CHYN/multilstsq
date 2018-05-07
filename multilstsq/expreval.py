@@ -166,9 +166,9 @@ class ExprEvaluator:
         if constants is None:
             constants = {}
 
-        self._caller_modules = {}
-        self._enable_caller_modules = enable_caller_modules
-        if self._enable_caller_modules:
+        self._caller_modules = enable_caller_modules
+        if self._caller_modules is True:
+            self._caller_modules = {}
             frame = inspect.currentframe()
             while frame.f_globals['__name__'].startswith('.'.join(__name__.split('.')[:-1])):
                 frame = frame.f_back
@@ -176,6 +176,8 @@ class ExprEvaluator:
             for k, v in itertools.chain(frame.f_locals.items(), frame.f_globals.items()):
                 if k not in self._caller_modules and isinstance(v, types.ModuleType):
                     self._caller_modules[k] = v
+        elif self._caller_modules is False:
+            self._caller_modules = {}
 
         self._constants = constants.copy()
         if type(expr) == str:
@@ -216,7 +218,7 @@ class ExprEvaluator:
         else:
             new_constants = self._constants
 
-        return ExprEvaluator(new_expr, new_constants, self._enable_caller_modules)
+        return ExprEvaluator(new_expr, new_constants, self._caller_modules)
 
     @property
     def constants(self):
@@ -257,7 +259,7 @@ class ExprEvaluator:
 
         new_constants = rt.constants
 
-        return ExprEvaluator(new_expr, new_constants, self._enable_caller_modules)
+        return ExprEvaluator(new_expr, new_constants, self._caller_modules)
 
     def eval(self):
         """

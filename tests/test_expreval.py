@@ -127,6 +127,11 @@ class TestExprEvaluator(unittest.TestCase):
         ee = ExprEvaluator('numpy.sin(x)')
         self.assertEqual(ee.substitute(None, {'x': [numpy.pi / 2]}).eval(), 1)
 
+    def test_numpy_no_caller_modules(self):
+        ee = ExprEvaluator('numpy.sin(x)', enable_caller_modules=False)
+        with self.assertRaises(ValueError):
+            self.assertEqual(ee.substitute(None, {'x': [numpy.pi / 2]}).eval(), 1)
+
     def test_ast_compare(self):
         self.assertTrue(ast_compare(ast.parse('a+b', mode='eval'), ast.parse('a+b', mode='eval')))
         self.assertFalse(ast_compare(ast.parse('a+b', mode='eval'), ast.parse('a', mode='eval')))
