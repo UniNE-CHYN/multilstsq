@@ -167,7 +167,8 @@ class ExprEvaluator:
             constants = {}
 
         self._caller_modules = {}
-        if enable_caller_modules:
+        self._enable_caller_modules = enable_caller_modules
+        if self._enable_caller_modules:
             frame = inspect.currentframe()
             while frame.f_globals['__name__'].startswith('.'.join(__name__.split('.')[:-1])):
                 frame = frame.f_back
@@ -215,7 +216,7 @@ class ExprEvaluator:
         else:
             new_constants = self._constants
 
-        return ExprEvaluator(new_expr, new_constants)
+        return ExprEvaluator(new_expr, new_constants, self._enable_caller_modules)
 
     @property
     def constants(self):
@@ -255,7 +256,7 @@ class ExprEvaluator:
 
         new_constants = rt.constants
 
-        return ExprEvaluator(new_expr, new_constants)
+        return ExprEvaluator(new_expr, new_constants, self._enable_caller_modules)
 
     def eval(self):
         """
