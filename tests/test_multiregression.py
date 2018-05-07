@@ -3,6 +3,7 @@ import sys
 import unittest
 from multilstsq import MultiLstSq, MultiRegression
 
+
 class TestMultiLstSq(unittest.TestCase):
     x_i = [1.47, 1.50, 1.52, 1.55, 1.57, 1.60, 1.63, 1.65, 1.68, 1.70, 1.73, 1.75, 1.78, 1.80, 1.83]
     y_i = [52.21, 53.12, 54.48, 55.84, 57.20, 58.57, 59.93, 61.29, 63.11, 64.47, 66.28, 68.10, 69.92, 72.19, 74.46]
@@ -52,10 +53,10 @@ class TestMultiLstSq(unittest.TestCase):
     def test_simple_one_by_one(self):
         mr = self._construct_mr_step_by_step()
 
-        #x is a vertical vector contataining the solution
+        # x is a vertical vector contataining the solution
         self.assertAlmostEqual(mr.beta[0, 0], -39.062, 3)
         self.assertAlmostEqual(mr.beta[1, 0], 61.272, 3)
-        #variance is the variance-covariance matrix
+        # variance is the variance-covariance matrix
         self.assertAlmostEqual(mr.variance[0, 0], 8.63185, 5)
         self.assertAlmostEqual(mr.variance[1, 1], 3.1539, 4)
 
@@ -77,10 +78,10 @@ class TestMultiLstSq(unittest.TestCase):
         numpy.testing.assert_array_almost_equal(mr._rss, mrss._rss)
         numpy.testing.assert_array_almost_equal(mr._n_observations, mrss._n_observations)
 
-        #x is a vertical vector contataining the solution
+        # x is a vertical vector contataining the solution
         self.assertAlmostEqual(mr.beta[0, 0], -39.062, 3)
         self.assertAlmostEqual(mr.beta[1, 0], 61.272, 3)
-        #variance is the variance-covariance matrix
+        # variance is the variance-covariance matrix
         self.assertAlmostEqual(mr.variance[0, 0], 8.63185, 5)
         self.assertAlmostEqual(mr.variance[1, 1], 3.1539, 4)
 
@@ -128,10 +129,10 @@ class TestMultiLstSq(unittest.TestCase):
         numpy.testing.assert_array_almost_equal(mr.variance[0], mr.variance[1])
         numpy.testing.assert_array_almost_equal(mr.variance[0], mr.variance[2])
 
-        #x is a vertical vector contataining the solution
+        # x is a vertical vector contataining the solution
         self.assertAlmostEqual(mr.beta[0][0, 0], -39.062, 3)
         self.assertAlmostEqual(mr.beta[0][1, 0], 61.272, 3)
-        #variance is the variance-covariance matrix
+        # variance is the variance-covariance matrix
         self.assertAlmostEqual(mr.variance[0][0, 0], 8.63185, 5)
         self.assertAlmostEqual(mr.variance[0][1, 1], 3.1539, 4)
 
@@ -173,10 +174,10 @@ class TestMultiLstSq(unittest.TestCase):
         numpy.testing.assert_array_almost_equal(mr.variance[0, 0], mr.variance[1, 0])
         numpy.testing.assert_array_almost_equal(mr.variance[0, 0], mr.variance[1, 1])
 
-        #x is a vertical vector contataining the solution
+        # x is a vertical vector contataining the solution
         self.assertAlmostEqual(mr.beta[0, 0][0, 0], -39.062, 3)
         self.assertAlmostEqual(mr.beta[0, 0][1, 0], 61.272, 3)
-        #variance is the variance-covariance matrix
+        # variance is the variance-covariance matrix
         self.assertAlmostEqual(mr.variance[0, 0][0, 0], 8.63185, 5)
         self.assertAlmostEqual(mr.variance[0, 0][1, 1], 3.1539, 4)
 
@@ -216,10 +217,10 @@ class TestMultiLstSq(unittest.TestCase):
         numpy.testing.assert_array_almost_equal(mr.variance[0, 0], mr.variance[1, 0])
         numpy.testing.assert_array_almost_equal(mr.variance[0, 0], mr.variance[1, 1])
 
-        #x is a vertical vector contataining the solution
+        # x is a vertical vector contataining the solution
         self.assertAlmostEqual(mr.beta[0, 0][0, 0], -39.062, 3)
         self.assertAlmostEqual(mr.beta[0, 0][1, 0], 61.272, 3)
-        #variance is the variance-covariance matrix
+        # variance is the variance-covariance matrix
         self.assertAlmostEqual(mr.variance[0, 0][0, 0], 8.63185, 5)
         self.assertAlmostEqual(mr.variance[0, 0][1, 1], 3.1539, 4)
 
@@ -251,8 +252,8 @@ class TestMultiLstSq(unittest.TestCase):
 
             mr2.switch_to_variance()
 
-        #print(mr1.x.T)
-        #print(mr2.x.T)
+        # print(mr1.x.T)
+        # print(mr2.x.T)
 
         numpy.testing.assert_almost_equal(mr1.beta, mr2.beta)
         numpy.testing.assert_almost_equal(mr1.variance, mr2.variance)
@@ -282,10 +283,10 @@ class TestMultiLstSq(unittest.TestCase):
 
             mmr.switch_to_variance()
 
-        #x is a vertical vector contataining the solution
+        # x is a vertical vector contataining the solution
         self.assertAlmostEqual(mmr.beta[0, 0], -39.062, 3)
         self.assertAlmostEqual(mmr.beta[1, 0], 61.272, 3)
-        #variance is the variance-covariance matrix
+        # variance is the variance-covariance matrix
         self.assertAlmostEqual(mmr.variance[0, 0], 8.63185, 5)
         self.assertAlmostEqual(mmr.variance[1, 1], 3.1539, 4)
 
@@ -299,10 +300,10 @@ class TestMultiLstSq(unittest.TestCase):
             mmr.add_data(A, b)
             mmr.switch_to_variance()
 
-        #x is a vertical vector contataining the solution
+        # x is a vertical vector contataining the solution
         self.assertAlmostEqual(mmr.beta[0, 0], -39.062, 3)
         self.assertAlmostEqual(mmr.beta[1, 0], 61.272, 3)
-        #variance is the variance-covariance matrix
+        # variance is the variance-covariance matrix
         self.assertAlmostEqual(mmr.variance[0, 0], 8.63185, 5)
         self.assertAlmostEqual(mmr.variance[1, 1], 3.1539, 4)
 
@@ -333,18 +334,16 @@ class TestMultiLstSq(unittest.TestCase):
         A = numpy.ma.vstack((Ao, numpy.ma.masked_all((5, 1))))
         b = numpy.ma.vstack((bo, numpy.ma.masked_all((5, 1))))
 
-
-
         for i in range(2):
             mmr.add_data(Am, bo)
             mmr.add_data(Ao, bm)
             mmr.add_data(A, b)
             mmr.switch_to_variance()
 
-        #x is a vertical vector contataining the solution
+        # x is a vertical vector contataining the solution
         self.assertAlmostEqual(mmr.beta[0, 0], -39.062, 3)
         self.assertAlmostEqual(mmr.beta[1, 0], 61.272, 3)
-        #variance is the variance-covariance matrix
+        # variance is the variance-covariance matrix
         self.assertAlmostEqual(mmr.variance[0, 0], 8.63185, 5)
         self.assertAlmostEqual(mmr.variance[1, 1], 3.1539, 4)
 
@@ -366,10 +365,10 @@ class TestMultiLstSq(unittest.TestCase):
         mmr2 = pickle.loads(pickle.dumps(mmr))
 
         for i in range(3):
-            #x is a vertical vector contataining the solution
+            # x is a vertical vector contataining the solution
             self.assertAlmostEqual(mmr.beta[i][0, 0], -39.062, 3)
             self.assertAlmostEqual(mmr.beta[i][1, 0], 61.272, 3)
-            #variance is the variance-covariance matrix
+            # variance is the variance-covariance matrix
             self.assertAlmostEqual(mmr.variance[i][0, 0], 8.63185, 5)
             self.assertAlmostEqual(mmr.variance[i][1, 1], 3.1539, 4)
 
@@ -377,7 +376,10 @@ class TestMultiLstSq(unittest.TestCase):
 
             self.assertAlmostEqual(mmr2.get_expr_for_idx((i, ))(1), 22.21023062)
 
-        numpy.testing.assert_almost_equal(mmr.apply_expr.substitute(None, {'X': numpy.array([[[1]], [[1]], [[1]]])}).eval(), numpy.array([22.21023062, 22.21023062, 22.21023062]))
+        numpy.testing.assert_almost_equal(
+            mmr.apply_expr.substitute(None, {'X': numpy.array([[[1]], [[1]], [[1]]])}).eval(),
+            numpy.array([22.21023062, 22.21023062, 22.21023062])
+        )
 
     def test_model_multilstsq_complex(self):
         pmr = MultiRegression((), 'b0+b1*x0+b2*x1')
@@ -402,8 +404,8 @@ class TestMultiLstSq(unittest.TestCase):
 
     def test_regression_vs_numpy(self):
         for dim in range(1, 5):
-            X = numpy.random.normal(size=(dim*2, dim))
-            y = numpy.random.normal(size=(dim*2, 1))
+            X = numpy.random.normal(size=(dim * 2, dim))
+            y = numpy.random.normal(size=(dim * 2, 1))
 
             Xmr = numpy.array([numpy.zeros_like(X), X])
             ymr = numpy.array([numpy.zeros_like(y), y])
@@ -416,10 +418,9 @@ class TestMultiLstSq(unittest.TestCase):
             beta_hat = mr.beta[1]
             beta_cov = mr.variance
 
-            #FIXME: is there a way to compute the covariance with numpy directly?
+            # FIXME: is there a way to compute the covariance with numpy directly?
             numpy.testing.assert_almost_equal(beta_hat, numpy.linalg.lstsq(X, y, rcond=-1)[0])
 
 
 if __name__ == '__main__':
     unittest.main()
-

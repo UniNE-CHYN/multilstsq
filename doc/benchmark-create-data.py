@@ -17,16 +17,15 @@ if __name__ == '__main__':
     explanatories = list(sorted(x for x in expr.variables if x.startswith('x')))
     parameters = list(sorted(x for x in expr.variables if x.startswith('b')))
 
-    d['explanatories'] = EmptyNDArray(shape+(nval, len(explanatories)))
-    d['response'] = EmptyNDArray(shape+(nval, 1))
-    d['parameters'] = numpy.random.normal(size=shape+(len(parameters), ))
+    d['explanatories'] = EmptyNDArray(shape + (nval, len(explanatories)))
+    d['response'] = EmptyNDArray(shape + (nval, 1))
+    d['parameters'] = numpy.random.normal(size=shape + (len(parameters), ))
 
     d.vacuum()
 
     m_explanatories = d['explanatories']
     m_response = d['response']
     m_parameters = d['parameters']
-
 
     for pos in itertools.product(*(range(x) for x in shape)):
         print(pos)
@@ -36,9 +35,6 @@ if __name__ == '__main__':
         expr_res = expr.substitute(None, p)
         expr_res.enable_call(explanatories)
         m_response[pos] = expr_res(*m_explanatories[pos].T)[:, numpy.newaxis]
-
-
-
 
     import IPython
     IPython.embed()

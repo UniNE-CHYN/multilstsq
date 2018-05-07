@@ -6,6 +6,7 @@ import ast
 from multilstsq import ExprEvaluator, RegrExprEvaluator
 from multilstsq.expreval import ast_compare
 
+
 class TestExprEvaluator(unittest.TestCase):
 
     def setUp(self):
@@ -13,9 +14,9 @@ class TestExprEvaluator(unittest.TestCase):
 
     def test_basiceval(self):
         self.assertEqual(ExprEvaluator('a', {'a': 3}).eval(), 3)
-        self.assertEqual(ExprEvaluator('a+b', {'a': 3, 'b': 4,}).eval(), 7)
+        self.assertEqual(ExprEvaluator('a+b', {'a': 3, 'b': 4, }).eval(), 7)
 
-        #Not enough variables to evaluate
+        # Not enough variables to evaluate
         self.assertRaises(ValueError, ExprEvaluator('a').eval)
         self.assertRaises(ValueError, ExprEvaluator('a+b', {'a': 3}).eval)
         self.assertRaises(ValueError, ExprEvaluator('a+b', {'b': 4}).eval)
@@ -27,39 +28,39 @@ class TestExprEvaluator(unittest.TestCase):
         ee0 = ee.substitute()
         self.assertEqual(ee0.variables, set(['a', 'b', 'c']))
 
-        ee1 = ee.substitute(None, {'a': 2,})
+        ee1 = ee.substitute(None, {'a': 2, })
         self.assertEqual(ee1.variables, set(['b', 'c']))
         self.assertEqual(ee1.constants, set(['a']))
 
-        ee2 = ee.substitute(None, {'b': 3,})
+        ee2 = ee.substitute(None, {'b': 3, })
         self.assertEqual(ee2.variables, set(['a', 'c']))
         self.assertEqual(ee2.constants, set(['b']))
 
-        ee3 = ee.substitute(None, {'c': 4,})
+        ee3 = ee.substitute(None, {'c': 4, })
         self.assertEqual(ee3.variables, set(['a', 'b']))
         self.assertEqual(ee3.constants, set(['c']))
 
-        ee12 = ee1.substitute(None, {'b': 3,})
+        ee12 = ee1.substitute(None, {'b': 3, })
         self.assertEqual(ee12.variables, set(['c']))
         self.assertEqual(ee12.constants, set(['a', 'b']))
 
-        ee23 = ee2.substitute(None, {'c': 4,})
+        ee23 = ee2.substitute(None, {'c': 4, })
         self.assertEqual(ee23.variables, set(['a']))
         self.assertEqual(ee23.constants, set(['b', 'c']))
 
-        ee31 = ee3.substitute(None, {'a': 2,})
+        ee31 = ee3.substitute(None, {'a': 2, })
         self.assertEqual(ee31.variables, set(['b']))
         self.assertEqual(ee31.constants, set(['a', 'c']))
 
-        ee123a = ee12.substitute(None, {'c': 4,})
+        ee123a = ee12.substitute(None, {'c': 4, })
         self.assertEqual(ee123a.variables, set([]))
         self.assertEqual(ee123a.constants, set(['a', 'b', 'c']))
 
-        ee123b = ee23.substitute(None, {'a': 2,})
+        ee123b = ee23.substitute(None, {'a': 2, })
         self.assertEqual(ee123b.variables, set([]))
         self.assertEqual(ee123b.constants, set(['a', 'b', 'c']))
 
-        ee123c = ee31.substitute(None, {'b': 3,})
+        ee123c = ee31.substitute(None, {'b': 3, })
         self.assertEqual(ee123c.variables, set([]))
         self.assertEqual(ee123c.constants, set(['a', 'b', 'c']))
 
@@ -71,7 +72,7 @@ class TestExprEvaluator(unittest.TestCase):
         self.assertEqual(ee123b.substitute(None, {'b': 4}).eval(), 18)
         self.assertEqual(ee123c.substitute(None, {'c': 10}).eval(), 32)
 
-        eeast = ee.substitute({ast.parse('b*c', mode = 'eval').body: 'd'})
+        eeast = ee.substitute({ast.parse('b*c', mode='eval').body: 'd'})
         self.assertEqual(eeast.variables, set(['a', 'd']))
 
     def test_reduce(self):
@@ -101,7 +102,7 @@ class TestExprEvaluator(unittest.TestCase):
         self.assertEqual(ee13r.constants, set(['a', 'c']))
 
         self.assertEqual(ee23r.variables, set(['a']))
-        #Should contain only one constant (b+c -> reduced)
+        # Should contain only one constant (b+c -> reduced)
         self.assertEqual(len(ee23r.constants), 1)
         self.assertRegex(list(ee23r.constants)[0], '^\_\_ExprEvaluator\_[0-9]+$')
 
@@ -113,10 +114,10 @@ class TestExprEvaluator(unittest.TestCase):
 
     def test_substitute_vars_2(self):
         ee = ExprEvaluator('a+(b*c)')
-        ee2 = ee.substitute({'a': 'x[0]','b': 'x[1]', 'c': 'x[2]'})
+        ee2 = ee.substitute({'a': 'x[0]', 'b': 'x[1]', 'c': 'x[2]'})
 
         self.assertEqual(ee2.variables, {'x'})
-        self.assertEqual(ee2.substitute(None, {'x': [2, 3, 4],}).eval(), 14)
+        self.assertEqual(ee2.substitute(None, {'x': [2, 3, 4], }).eval(), 14)
 
     def test_evaluable(self):
         ee = ExprEvaluator('2+4')
@@ -142,7 +143,6 @@ class TestExprEvaluator(unittest.TestCase):
 
         eesub2 = ee.substitute({'a': ast.parse('e*f', mode='eval').body})
         self.assertEqual(eesub1.variables, {'e', 'f', 'b', 'c'})
-
 
     def test_substitute_4(self):
         ee = ExprEvaluator('a+(b*c)+a*(d*e)')
@@ -172,7 +172,6 @@ class TestExprEvaluator(unittest.TestCase):
         ee.enable_call(['a', 'b', 'c'])
         self.assertEqual(ee(1, 2, 3), 7)
 
-
     def test_ExprEvaluator_to_string_and_repr(self):
         from ast import BinOp, Name, Load, Add, Mult
         ee = ExprEvaluator('a+(b*c)')
@@ -197,6 +196,7 @@ class TestExprEvaluator(unittest.TestCase):
 
 
 class TestRegrExprEvaluator(unittest.TestCase):
+
     def test_find_coeff_for(self):
         ree = RegrExprEvaluator('b0 + (x0+x1)*b1 + (x0**2)*b2')
         self.assertEqual(ree.find_coeff_for('b0').eval(), 1)
@@ -213,17 +213,5 @@ class TestRegrExprEvaluator(unittest.TestCase):
         self.assertEqual(ree.explanatory_variables, ['x0', 'x1'])
 
 
-
-
-
-
-
-
-
-
 if __name__ == '__main__':
     unittest.main()
-
-
-
-

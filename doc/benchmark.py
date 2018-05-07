@@ -8,7 +8,7 @@ if __name__ == '__main__':
 
     d = mmapdict(sys.argv[1], True)
 
-    n =  d['explanatories'].shape[1]
+    n = d['explanatories'].shape[1]
     minsh = 1
     maxsh = 200
 
@@ -23,8 +23,8 @@ if __name__ == '__main__':
         beta = mmr.beta
         dt = time.time() - t
         times_multilstsq.append(dt)
-        #print(n, s)
-        #print(times_multilstsq)
+        # print(n, s)
+        # print(times_multilstsq)
 
     times_lstsq = []
     for s in range(minsh, maxsh):
@@ -45,8 +45,8 @@ if __name__ == '__main__':
 
         dt = time.time() - t
         times_lstsq.append(dt)
-        #print(n, s)
-        #print(times_lstsq)
+        # print(n, s)
+        # print(times_lstsq)
 
     from matplotlib import pyplot as plt
 
