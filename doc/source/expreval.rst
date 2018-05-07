@@ -51,6 +51,8 @@ By looking at the expression, we can observe that second operand of the multipli
 
 We can observe that the expression has indeed be reduced. In the present case, it would have made sense to reduce it to ``(a) * 7``, but instead a (reserved) constant ``__ExprEvaluator_0`` has been created. This makes sense the result of the parenthesis could have been a complex object, like a numpy array.
 
+If the expression is evaluated multiple times, it is usually a large performance improvement to substitute everything possible before evaluating it.
+
 Note that any python object can be substituted:
 
 .. code-block:: python
@@ -79,22 +81,31 @@ This behavious can be disabled if needed:
 .. code-block:: python
 
   import numpy as np
-  e = ExprEvaluator('np.linalg.inv(A).dot(y)',enable_caller_modules=False)
+  e = ExprEvaluator('np.linalg.inv(A).dot(y)', enable_caller_modules=False)
   v1 = np.array([[1, 4], [2, -1]])
   v2 = np.array([9, 0])
   e(A=v1,y=v2) # Will fail, np is not defined
 
   e(A=v1,y=v2, np=np) # returns array([1., 2.])
-s
 
 
+Additionally, it is also possible to substitute a variable in the expression by something else:
+
+.. code-block:: python
+
+  import numpy as np
+  e = ExprEvaluator('np.linalg.inv(A).dot(y)')
+  e2 = e.substitute(expressions={'A':'A.T'})
+
+  str(e2) # '(((((np).linalg).inv)(A)).dot)(y)'
+
+  v1 = np.array([[1, 4], [2, -1]])
+  v2 = np.array([9, 0])
+  e(A=v1,y=v2) # returns array([1., 4.])
 
 
-
-
-1. An expression is
+This functionnality is used extensively by the :class:`multilstsq.MultiRegression` class.
 
 .. warning ::
 
-  Using ``ExprEvaluator`` to evaluate expressions from untrusted sources may lead to security vulnerabilities. It should however be safe to use it as long as
-  :meth:`multilstsq.ExprEvaluator.eval` is not called.
+  Using :class:`multilstsq.ExprEvaluator` to evaluate expressions from untrusted sources may lead to security vulnerabilities.
