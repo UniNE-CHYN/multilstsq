@@ -107,16 +107,42 @@ class MultiLstSq:
             sweights = numpy.sqrt(w)
             X = X * numpy.repeat(sweights, X.shape[-1], sweights.ndim - 1)
             y = y * sweights
+
+        if isinstance(X, numpy.ma.MaskedArray) or isinstance(y, numpy.ma.MaskedArray):
+            Xf = X.filled(numpy.nan)
+            yf = y.filled(numpy.nan)
+            ym = numpy.ma.MaskedArray(y)
+        else:
+            Xf = X
+            yf = y
+            ym = numpy.ma.MaskedArray(y)
+
+        if isinstance(X, numpy.ma.MaskedArray):
+            pos = numpy.flatnonzero(X.mask.any(len(self._problem_dimensions) + 1))
+            pos = numpy.unravel_index(pos, Xf.shape[:-1])
+
+            Xf[pos] = 0
+            yf[pos] = 0
+            ym[pos] = numpy.ma.masked
+
+        if isinstance(y, numpy.ma.MaskedArray):
+            pos = numpy.flatnonzero(y.mask[..., 0])
+            pos = numpy.unravel_index(pos, yf.shape[:-1])
+            Xf[pos] = 0
+            yf[pos] = 0
+            ym[pos] = numpy.ma.masked
+
+
         if self._mode == MODE_REGRESSION:
             self._cache_beta = None
             # Eq to numpy.dot(X.T, X) on last dimensions
-            self._XtX += numpy.einsum('...kj,...kl', X, X)
-            self._Xty += numpy.einsum('...kj,...kl', X, y)
+            self._XtX += numpy.einsum('...kj,...kl', Xf, Xf)
+            self._Xty += numpy.einsum('...kj,...kl', Xf, yf)
         elif self._mode == MODE_VARIANCE:
             self._cache_variance = None
 
-            xh = self._evaluate_at(X)
-            my_n_obs = numpy.sum(numpy.sum(X != 0, axis=len(self._problem_dimensions) + 1) != 0, axis=len(self._problem_dimensions))
+            xh = self._evaluate_at(Xf)
+            my_n_obs = numpy.sum(numpy.sum(Xf != 0, axis=len(self._problem_dimensions) + 1) != 0, axis=len(self._problem_dimensions))
 
             self._rss += numpy.sum((xh - y) ** 2, axis=len(self._problem_dimensions))[..., 0]
             self._n_observations += my_n_obs  # X.shape[-2]

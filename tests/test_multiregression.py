@@ -307,6 +307,46 @@ class TestMultiLstSq(unittest.TestCase):
         self.assertAlmostEqual(mmr.variance[0, 0], 8.63185, 5)
         self.assertAlmostEqual(mmr.variance[1, 1], 3.1539, 4)
 
+    def test_multilstsq_masked(self):
+        mls = MultiLstSq((2, 3), 2)
+
+        # 4 observations
+        X = numpy.ma.masked_all((2, 3, 4, 2))
+        y = numpy.ma.masked_all((2, 3, 4, 1))
+
+        # This is for β₀
+        X[:, :, :, 0] = 1
+
+        # Values of x, as coefficients of β₁
+        # The first two dims are the problem index
+        # The third is the observation index
+        X[0, 0, :, 1] = [1, 2, 3, 4]
+        X[0, 1, :, 1] = [1, 2, 1, 2]
+        X[0, 2, :, 1] = [1, 1, 1, 1]
+        X[1, 0, :, 1] = [-5, -6, 13, 43]
+        X[1, 1, :3, 1] = [-1, 0, 1] # only 3 observations
+        X[1, 2, :2, 1] = [4, 8] # only 2 observations
+
+        # Observations
+        y[0, 0, :, 0] = [1, 2, 3, 4]
+        y[0, 1, :, 0] = [1.1, 2, 0.9, 2.1]
+        y[0, 2, :, 0] = [3, 4, 5, 6]
+        y[1, 0, :, 0] = [-5.9, -5.2, 11.9, 42.1]
+        y[1, 1, :3, 0] = [1, 2, 3] # only 3 observations
+        y[1, 2, :2, 0] = [4.5, 5] # only 2 observations
+
+        mls.add_data(X, y)
+        mls.switch_to_variance()
+        mls.add_data(X, y)
+
+        self.assertEqual(mls.n_observations[0, 0], 4)
+        self.assertEqual(mls.n_observations[0, 1], 4)
+        self.assertEqual(mls.n_observations[0, 2], 4)
+        self.assertEqual(mls.n_observations[1, 0], 4)
+        self.assertEqual(mls.n_observations[1, 1], 3)
+        self.assertEqual(mls.n_observations[1, 2], 2)
+
+
     def test_model_multilstsq_validation(self):
         with self.assertRaises(ValueError):
             mmr = MultiRegression((), '1')
