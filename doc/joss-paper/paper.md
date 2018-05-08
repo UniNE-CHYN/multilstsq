@@ -20,7 +20,7 @@ bibliography: paper.bib
 
 Least squares fitting is a underlying method for numerous applications, the most common one being linear regression. It consists in finding the parameters vector ``β°`` which minimizes ``‖ε‖₂`` in the equation ``y = Xβ + ε``, where `X` is the design matrix, `y` the observation vector, and `ε` the error vector.
 
-Since it is a fundamental algorithm, a number of Python 3 implementation exists, with different feature sets and performance, such as:  `numpy.linalg.lstsq`, `scipy.stats.linregress`, `sklearn.linear_model.LinearRegression` and `statsmodel.OLS`.
+Since it is a fundamental algorithm, a number of Python 3 implementations exist, with different feature sets and performance, such as:  `numpy.linalg.lstsq`, `scipy.stats.linregress`, `sklearn.linear_model.LinearRegression` and `statsmodel.OLS`.
 
 However, the current available libraries are not designed to work on a large quantity of simultaneous problems, for example solving a least square problem for each pixel of an image. Iterating over a large number of small problems is inefficient. Moreover, when doing linear regression, it is often tedious to build the design matrix `X`.
 
@@ -33,13 +33,13 @@ To reach these goals, `multilstsq` uses the following techniques:
 - Masked data are handled as lines of zeros in the design matrix and the observation, which in fact have no effect. This allows adding different amount of data in different subproblems.
 - For regression, an expression evaluator is implemented, which converts the input model from the user (for example `b0+b1*x0`) into the complex expression needed to build the design matrix from the vector `X` provided by the user. In that example, it is: `np.concatenate([np.ones(o_dim)[(..., np.newaxis)], ((X)[..., :, 0])[(..., np.newaxis)]])`. This expression evaluator also may be useful for other purposes in other libraries.
 
-As shown in the following figure, this ensures the algorithm has good performance compared to a loop every problem:
+As shown in the following figure, this ensures the algorithm has good performance compared to a loop:
 
 ![Parallel performance of multilstsq, constant data size.](https://raw.githubusercontent.com/UniNE-CHYN/multilstsq/master/doc/benchmark.png).
 
 # Applications
 
-As linear regression is the underlying operations of many algorithms, many applications can be thought of. The author uses this module for the processing of hyperspectral images, since it is quite common to have to do a regression for each pixel (in the order of 10⁶ to 10⁸ pixels per image).
+As linear regressions are the underlying operations of many algorithms, many applications can be thought of. The author uses this module for the processing of hyperspectral images, since it is quite common to have to do a regression for each pixel (in the order of 10⁶ to 10⁸ pixels per image).
 
 For example, it can be used to do [flat field correction](https://en.wikipedia.org/wiki/Flat-field_correction), [high dynamic range imaging](https://en.wikipedia.org/wiki/High-dynamic-range_imaging), and image stitching.
 

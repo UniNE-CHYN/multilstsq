@@ -8,7 +8,7 @@ Welcome to the documentation of multilstsq!
 
 Least squares fitting is a underlying method for numerous applications, the most common one being linear regression. It consists in finding the parameters vector ``β°`` which minimizes ``‖ε‖₂`` in the equation ``y = Xβ + ε``, where ``X`` is the design matrix, ``y`` the observation vector, and `ε` the error vector.
 
-Since it is a fundamental algorithm, a number of Python 3 implementation exists, with different feature sets and performance, such as:  ``numpy.linalg.lstsq``, ``scipy.stats.linregress``, ``sklearn.linear_model.LinearRegression`` and ``statsmodel.OLS``.
+Since it is a fundamental algorithm, a number of Python 3 implementations exist, with different feature sets and performance, such as:  ``numpy.linalg.lstsq``, ``scipy.stats.linregress``, ``sklearn.linear_model.LinearRegression`` and ``statsmodel.OLS``.
 
 However, the current available libraries are not designed to work on a large quantity of simultaneous problems, for example solving a least square problem for each pixel of an image. Iterating over a large number of small problems is inefficient. Moreover, when doing linear regression, it is often tedious to build the design matrix ``X``.
 
