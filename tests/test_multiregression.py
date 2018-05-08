@@ -324,16 +324,16 @@ class TestMultiLstSq(unittest.TestCase):
         X[0, 1, :, 1] = [1, 2, 1, 2]
         X[0, 2, :, 1] = [1, 1, 1, 1]
         X[1, 0, :, 1] = [-5, -6, 13, 43]
-        X[1, 1, :3, 1] = [-1, 0, 1] # only 3 observations
-        X[1, 2, :2, 1] = [4, 8] # only 2 observations
+        X[1, 1, :3, 1] = [-1, 0, 1]  # only 3 observations
+        X[1, 2, :2, 1] = [4, 8]  # only 2 observations
 
         # Observations
         y[0, 0, :, 0] = [1, 2, 3, 4]
         y[0, 1, :, 0] = [1.1, 2, 0.9, 2.1]
         y[0, 2, :, 0] = [3, 4, 5, 6]
         y[1, 0, :, 0] = [-5.9, -5.2, 11.9, 42.1]
-        y[1, 1, :3, 0] = [1, 2, 3] # only 3 observations
-        y[1, 2, :2, 0] = [4.5, 5] # only 2 observations
+        y[1, 1, :3, 0] = [1, 2, 3]  # only 3 observations
+        y[1, 2, :2, 0] = [4.5, 5]  # only 2 observations
 
         mls.add_data(X, y)
         mls.switch_to_variance()
@@ -345,7 +345,6 @@ class TestMultiLstSq(unittest.TestCase):
         self.assertEqual(mls.n_observations[1, 0], 4)
         self.assertEqual(mls.n_observations[1, 1], 3)
         self.assertEqual(mls.n_observations[1, 2], 2)
-
 
     def test_model_multilstsq_validation(self):
         with self.assertRaises(ValueError):

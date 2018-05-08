@@ -132,7 +132,6 @@ class MultiLstSq:
             yf[pos] = 0
             ym[pos] = numpy.ma.masked
 
-
         if self._mode == MODE_REGRESSION:
             self._cache_beta = None
             # Eq to numpy.dot(X.T, X) on last dimensions
