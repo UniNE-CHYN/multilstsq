@@ -17,6 +17,9 @@ The number of problem dimension doesn't have much influence on the way the compu
 For instance, if a characteristics is required for each element of a 20×20 grid, it makes sense to define the problem dimension as ``(20, 20)``, even though it
 would be possible to map the problem to a ``(400, )`` or a ``(10, 10, 4)`` problem dimension.
 
+Solving a least squares problem
+-------------------------------
+
 First, lets see how to solve a least squares problem.
 
 To keep the example small, let consider ``problem_dimension = (2, 3)``, and the model to be ``y = β₀ + β₁x``.
@@ -84,4 +87,116 @@ Once we added all the data, we can get ``β``:
 
   print(mls.beta[0, 2]) # This problem cannot be solved, we get [nan, nan]
 
-It may be required to have variance information. We need to switch to variance mode, and then ...
+It may be required to have variance information. We need to switch to variance mode, and then re-add all the data:
+
+.. code-block:: python
+
+  mls.switch_to_variance()
+
+  # We should add exactly the same data as in the previous step.
+  # It doesn't matter if the number of calls is the same.
+  mls.add_data(X, y)
+
+Once all the data is added, it is possible to get the covariance matrix for each problem. The covariance matrix is of shape ``(n_parameters, n_parameters)`` for
+each subproblem.
+
+
+.. code-block:: python
+
+  # We can get the covariance matrix
+  print(mls.variance.shape)  # (2, 3, 2, 2)
+
+  print(mls.variance[0, 0])  # all zero, as it is a perfect fit
+
+  print(mls.variance[1, 0])  # [[0.299, -0.006], [-0.006, 0.001]]
+
+  print(mls.variance[1, 2])  # all masked: no variance can be computed (only two points for the line)
+  print(mls.variance[0, 2])  # all masked: no variance can be computed (not possible to do the fit)
+
+
+It is also possible to get some additional information, which enables additional processing (like implementing tests):
+
+.. code-block:: python
+
+  print(mls.n_observations)
+  # [[4 4 4]
+  #  [4 3 2]]
+
+  print(mls.n_parameters)
+  # 2
+
+  print(mls.sigma_2)
+  # [[0.00 0.01 -- ]
+  #  [0.90 0.00 -- ]]
+
+  print(mls.rss)
+  # [[0.00 0.03 -- ]
+  #  [1.81 0.00 0.0]]
+
+
+Solving a regression problem
+----------------------------
+
+The direct approach shown in the section above works well, but building the design matrix may be impractical when complex model are used, especially if the model
+changes. In the following example, for readability we will use ``()`` as the problem size, this means we only do a single regression. Working with a bigger
+problem size is exacly similar to the previous section.
+
+Let's say we have the following data:
+
+.. code-block:: python
+
+  import numpy as np
+  x0 = np.array([-0.44, -0.52, -0.65, 0.89, -1.15, 1.07, -0.1, 1.05, 1.5, 0.23, -0.87, 1.77, -0.42, 0.43, 1.58, -0.2, -1.69, -1.92, 1.18, -1.18])
+  x1 = np.array([1.36, -0.69, -0.96, -0.27, 0.34, -0.02, -0.63, -0.66, 0.96, -0.21, 0.01, -0.06, -1.3, 1.05, 1.08, -1.74, -0.87, 0.72, 0.7, 1.67])
+  y = np.array([-0.68, -1.74, -2.24, 2.65, -3.23, 3.29, -0.45, 2.97, 4.96, 0.71, -2.51, 5.35, -1.68, 1.81, 5.25, -1.2, -5.35, -5.41, 3.91, -2.79])
+
+We suspect that this data follows a multilinear relationship according to the model ``y = β₀ + β₁x₀ + β₂x₁``.
+The classical approach would be to create a design matrix with rows ``[1, x₀, x₁]``, but we can let the class :class:`multilstsq.MultiRegression` do the work for us:
+
+.. code-block:: python
+
+  from multilstsq import MultiRegression
+  mr = MultiRegression((), 'b0 + b1 * x0 + b2 * x1')
+
+  #Note that X is a matrix of two columns x₀, x₁
+  X = np.array([x0, x1]).T
+  Y = np.array([y]).T
+
+  mr.add_data(X,Y)
+  mr.switch_to_variance()
+  mr.add_data(X,Y)
+
+  mr.rss  # 0.002193175857390197
+
+  # etc.
+
+Now, let say we suspect that the model is not what we expected, we can compare models easily:
+
+.. code-block:: python
+
+  models = [
+    'b0 + b1 * x0 + b2 * x1',
+    'b0 + b1 * x0 + b2 * x1 + b3 * (x1**2)',
+    'b0 + b1 * x0 + b2 * x1 + b3 * (x0**2)',
+    'b0 + b1 * x0 + b2 * x1 + b3 * (x0**2) + b4 * (x1**2)',
+  ]
+
+  for model in models:
+    mr = MultiRegression((), model)
+    mr.add_data(X,Y)
+    mr.switch_to_variance()
+    mr.add_data(X,Y)
+
+    print('{:0.05f}'.format(mr.rss), model)
+
+  # We obtain the following output:
+  # 0.00278 b0 + b1 * x0 + b2 * x1
+  # 0.00270 b0 + b1 * x0 + b2 * x1 + b3 * (x1**2)
+  # 0.00016 b0 + b1 * x0 + b2 * x1 + b3 * (x0**2)
+  # 0.00014 b0 + b1 * x0 + b2 * x1 + b3 * (x0**2) + b4 * (x1**2)
+
+We can see that the best model is likely to be ``y = β₀ + β₁x₀ + β₂x₁ + β₂x₀²``. Using this kind of technique it is very simple to make step-wise regression.
+
+The model string can be any valid Python expression, but requires it to be linear in ``b``'s. Each variable ``b0``, ``b1``, ``b2``... corresponds to a parameter,
+while ``x0``, ``x1``, ``x2``... corresponds to columns of the matrix ``X``.
+
