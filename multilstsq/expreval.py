@@ -248,7 +248,6 @@ class ExprEvaluator:
         """
         constants_and_modules = self._caller_modules.copy()
         constants_and_modules.update(self._constants)
-        print(constants_and_modules)
         rt = _ReduceTransformer(constants_and_modules)
         new_expr = copy.deepcopy(self._parsed_expr)
         reduce_more = True
